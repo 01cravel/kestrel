@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kestrel — Portfolio Intelligence</title>
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #11161f; --panel-2: #161c28;
+    --border: #1f2937; --text: #e5e7eb; --muted: #6b7280;
+    --accent: #f59e0b; --accent-2: #fbbf24;
+    --green: #10b981; --red: #ef4444; --blue: #3b82f6; --purple: #8b5cf6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+  header { border-bottom: 1px solid var(--border); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; background: var(--panel); }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0a0e14; font-size: 18px; }
+  .brand-name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .brand-tag { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .header-right { display: flex; align-items: center; gap: 20px; }
+  nav { display: flex; gap: 24px; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+  nav a:hover, nav a.active { color: var(--text); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s ease-in-out infinite; }
+  .dot.idle { background: var(--muted); box-shadow: none; animation: none; }
+  .dot.err { background: var(--red); box-shadow: 0 0 8px var(--red); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  main { padding: 24px 32px; max-width: 1500px; margin: 0 auto; }
+  .grid { display: grid; gap: 16px; margin-bottom: 20px; }
+  .grid-6 { grid-template-columns: repeat(6, 1fr); }
+  .grid-2 { grid-template-columns: 2fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .card-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .card-change { font-size: 12px; margin-top: 4px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .neutral { color: var(--muted); }
+  .regime-good { border-left: 3px solid var(--green); }
+  .regime-bad { border-left: 3px solid var(--red); }
+  .regime-neutral { border-left: 3px solid var(--muted); }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+  .badge { font-size: 10px; background: var(--panel-2); color: var(--muted); padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 10px; color: var(--muted); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr.holding-row { cursor: pointer; transition: background 0.15s; }
+  tr.holding-row:hover { background: var(--panel-2); }
+  .ticker { font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .flash-up { animation: flashGreen 0.6s ease; }
+  .flash-down { animation: flashRed 0.6s ease; }
+  @keyframes flashGreen { 0%{background:rgba(16,185,129,0.25)} 100%{background:transparent} }
+  @keyframes flashRed   { 0%{background:rgba(239,68,68,0.25)}  100%{background:transparent} }
+  .signal { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .signal-strong-buy { background: rgba(16,185,129,0.25); color: var(--green); }
+  .signal-buy { background: rgba(16,185,129,0.15); color: var(--green); }
+  .signal-hold { background: rgba(107,114,128,0.2); color: var(--muted); }
+  .signal-trim { background: rgba(239,68,68,0.15); color: var(--red); }
+  .signal-sell { background: rgba(239,68,68,0.25); color: var(--red); }
+  .score-cell { display: flex; align-items: center; gap: 8px; min-width: 100px; }
+  .score-num { font-weight: 700; font-size: 14px; min-width: 30px; }
+  .score-bar { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+  .score-fill { height: 100%; transition: width 0.4s ease; }
+  .placeholder { padding: 30px; text-align: center; color: var(--muted); font-size: 13px; background: var(--panel-2); border-radius: 8px; border: 1px dashed var(--border); }
+  button.refresh { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  button.refresh:hover { border-color: var(--accent); }
+  footer { padding: 20px 32px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 40px; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 28px; }
+  .modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .modal-ticker { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+  .modal-close { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; }
+  .score-breakdown { display: grid; gap: 10px; margin: 20px 0; }
+  .score-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 14px; background: var(--panel-2); border-radius: 8px; }
+  .score-row-label { font-size: 13px; }
+  .score-row-weight { font-size: 11px; color: var(--muted); }
+  .score-row-value { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 50px; text-align: right; }
+  .detail-section { margin-top: 24px; }
+  .detail-section h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .detail-list { font-size: 13px; }
+  .detail-list-item { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 10px; }
+  .detail-list-item:last-child { border-bottom: none; }
+  .gauge-mini { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .news-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .news-item:last-child { border-bottom: none; }
+  .news-headline { font-size: 13px; line-height: 1.4; margin-bottom: 4px; }
+  .news-headline a { color: var(--text); text-decoration: none; }
+  .news-headline a:hover { color: var(--accent); }
+  .news-meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  .news-tag { background: var(--panel-2); padding: 2px 6px; border-radius: 3px; font-size: 10px; }
+  .news-tag.analyst { background: rgba(245,158,11,0.15); color: var(--accent); }
+  .earnings-card { padding: 14px; background: var(--panel-2); border-radius: 10px; border-left: 3px solid var(--muted); margin-bottom: 10px; }
+  .earnings-card.urgent { border-left-color: var(--red); background: rgba(239,68,68,0.06); }
+  .earnings-card.soon { border-left-color: var(--accent); background: rgba(245,158,11,0.04); }
+  .earnings-card.later { border-left-color: var(--muted); }
+  .earnings-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .earnings-ticker { font-size: 18px; font-weight: 700; }
+  .earnings-when { text-align: right; }
+  .earnings-days { font-size: 18px; font-weight: 700; }
+  .earnings-date { font-size: 11px; color: var(--muted); }
+  .earnings-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .earnings-stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .earnings-stat-value { font-weight: 600; margin-top: 2px; }
+
+  /* AI Forecast box */
+  .forecast-box { background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.05)); border: 1px solid rgba(139,92,246,0.2); border-radius: 12px; padding: 18px; margin: 16px 0; }
+  .forecast-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: var(--purple); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .forecast-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .forecast-cell { text-align: center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+  .forecast-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .forecast-price { font-size: 20px; font-weight: 700; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .forecast-pct { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Technical pills */
+  .tech-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tech-pill { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--panel-2); color: var(--muted); }
+  .tech-pill.good { background: rgba(16,185,129,0.15); color: var(--green); }
+  .tech-pill.bad { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tech-pill.warn { background: rgba(245,158,11,0.15); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">K</div>
+    <div><div class="brand-name">Kestrel</div><div class="brand-tag">Portfolio Intelligence</div></div>
+  </div>
+  <div class="header-right">
+    <nav>
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Holdings</a><a href="#">News</a><a href="#">Earnings</a><a href="#">Research</a>
+    </nav>
+    <div class="status"><div id="statusDot" class="dot idle"></div><span id="statusText">Idle</span></div>
+    <button class="refresh" onclick="openSettings()" style="margin-left:8px;">⚙ Positions</button>
+  </div>
+</header>
+
+<main>
+
+  <div class="grid grid-4" id="portfolioStrip" style="display:none;">
+    <div class="card">
+      <div class="card-title">Portfolio Value</div>
+      <div class="card-value" id="portValue">—</div>
+      <div class="card-change" id="portValueSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Today's P&amp;L</div>
+      <div class="card-value" id="portDay">—</div>
+      <div class="card-change" id="portDaySub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Total P&amp;L</div>
+      <div class="card-value" id="portTotal">—</div>
+      <div class="card-change" id="portTotalSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cash</div>
+      <div class="card-value" id="portCash">—</div>
+      <div class="card-change" id="portCashSub" style="color:var(--muted);">—</div>
+    </div>
+  </div>
+
+  <div id="emptyPositions" class="card" style="text-align:center;padding:30px;background:rgba(245,158,11,0.05);border:1px dashed rgba(245,158,11,0.3);">
+    <div style="font-size:14px;margin-bottom:10px;">Add your share counts to see real P&amp;L</div>
+    <button class="refresh" onclick="openSettings()" style="background:var(--accent);color:#0a0e14;border:none;padding:8px 16px;font-weight:600;">Set Up Positions</button>
+  </div>
+
+  <div class="section-title" style="margin-top: 4px;">Market Conditions <span class="badge" id="macroUpdated">—</span></div>
+  <div class="grid grid-6">
+    <div class="card regime-neutral" id="macro-TNX"><div class="card-title">Borrowing Costs</div><div class="card-value" id="val-TNX">—</div><div class="card-change" id="chg-TNX">—</div><div class="gauge-mini">Lower helps your stocks</div></div>
+    <div class="card regime-neutral" id="macro-DXY"><div class="card-title">US Dollar</div><div class="card-value" id="val-DXY">—</div><div class="card-change" id="chg-DXY">—</div><div class="gauge-mini">Weaker helps chip stocks</div></div>
+    <div class="card regime-neutral" id="macro-VIX"><div class="card-title">Market Fear</div><div class="card-value" id="val-VIX">—</div><div class="card-change" id="chg-VIX">—</div><div class="gauge-mini">Below 20 means calm</div></div>
+    <div class="card regime-neutral" id="macro-SOXX"><div class="card-title">Chip Stocks</div><div class="card-value" id="val-SOXX">—</div><div class="card-change" id="chg-SOXX">—</div><div class="gauge-mini">Your main sector</div></div>
+    <div class="card regime-neutral" id="macro-URA"><div class="card-title">Uranium</div><div class="card-value" id="val-URA">—</div><div class="card-change" id="chg-URA">—</div><div class="gauge-mini">Drives OKLO, BE</div></div>
+    <div class="card regime-neutral" id="macro-BTC"><div class="card-title">Bitcoin</div><div class="card-value" id="val-BTC">—</div><div class="card-change" id="chg-BTC">—</div><div class="gauge-mini">Risk appetite gauge</div></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Upcoming Earnings Reports <span class="badge" id="earningsUpdated">—</span></div>
+    <div id="earningsBox" class="placeholder">Loading earnings calendar…</div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">
+      Your Stocks
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span class="badge" id="lastUpdate">—</span>
+        <button class="refresh" onclick="fetchAll(true)">Refresh</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Stock</th><th>Shares</th><th>Price</th><th>Value</th><th>Today $</th><th>Total P&amp;L</th><th>30d Forecast</th><th>Wall St</th><th>Insiders</th><th>Targets</th><th>Beat Streak</th><th>Short %</th><th>vs 52w High</th><th>Earnings</th></tr>
+        </thead>
+        <tbody id="holdingsBody"></tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:12px;">Click any row for full details</div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="section-title">Wall Street Ranking <span class="badge">By consensus</span></div>
+      <div id="convictionBox" class="placeholder">Loading…</div>
+    </div>
+    <div class="card">
+      <div class="section-title">Strong Signals Today <span class="badge">Auto-flagged</span></div>
+      <div id="signalsBox" class="placeholder">Loading…</div>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="section-title">Daily News &amp; Analyst Calls <span class="badge" id="newsUpdated">Updates daily</span></div>
+      <div id="newsBox" class="placeholder">Loading news…</div>
+    </div>
+    <div class="card">
+      <div class="section-title">Recent Insider Buying/Selling <span class="badge">Last 90d</span></div>
+      <div id="insiderBox" class="placeholder">Loading…</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="section-title">Wall Street Upgrades &amp; Downgrades <span class="badge">Last 30d</span></div>
+      <div id="analystBox" class="placeholder">Loading analyst actions…</div>
+    </div>
+  </div>
+
+</main>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <div>
+        <div style="font-size:22px;font-weight:700;">Your Positions</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px;">Enter shares and your average buy price for each stock</div>
+      </div>
+      <button class="modal-close" onclick="closeSettings()">×</button>
+    </div>
+    <div id="settingsBody"></div>
+    <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Cash</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <input type="text" id="cashLabel" placeholder="Account name (e.g. Sarwa Save)" style="background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:6px;font-size:13px;">
+        <input type="number" id="cashAmount" placeholder="Amount in USD" step="any" style="background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:6px;font-size:13px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+      <button class="refresh" onclick="closeSettings()">Cancel</button>
+      <button class="refresh" onclick="savePositions()" style="background:var(--accent);color:#0a0e14;border:none;font-weight:600;">Save</button>
+    </div>
+  </div>
+</div>
+
+<footer>Kestrel · Built for conviction-led investing · Not financial advice</footer>
+
+<script>
+const FINNHUB_KEY = 'd8athjpr01qk20soo93gd8athjpr01qk20soo940';
+const FMP_KEY = '5A4t09ebp9hJYpwuU93vLdccIapNSCnz';
+const TICKERS = ['MU','SPY','NBIS','VRT','V','GLD','CAT','NVDA','RKLB','LLY','MA','HCA','AVGO','STX','GOOGL','AXP','AMD','CEG','QBTS','COHR','ONDS'];
+const MACRO = [
+  { sym: '^TNX', label: 'TNX' }, { sym: 'UUP', label: 'DXY' },
+  { sym: '^VIX', label: 'VIX' }, { sym: 'SOXX', label: 'SOXX' },
+  { sym: 'URA', label: 'URA' }, { sym: 'BTC-USD', label: 'BTC' }
+];
+const REFRESH_MS = 60000;
+const DAILY_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+const state = {};
+const macroState = {};
+const earningsState = {};
+const newsCache = { items: [], lastFetch: 0 };
+
+// === POSITIONS ===
+// Shape: { NVDA: { shares: 100, cost: 450 }, ... }
+let positions = {};
+let cashAccount = { label: '', amount: 0 };
+
+const DEFAULT_POSITIONS = {
+  MU:    { shares: 52.58,  cost: 762.26 },
+  SPY:   { shares: 38.23,  cost: 668.16 },
+  NBIS:  { shares: 109.99, cost: 204.55 },
+  VRT:   { shares: 62.34,  cost: 240.92 },
+  V:     { shares: 46.75,  cost: 320.86 },
+  GLD:   { shares: 32.27,  cost: 415.42 },
+  CAT:   { shares: 10.97,  cost: 911.53 },
+  NVDA:  { shares: 46.32,  cost: 177.18 },
+  RKLB:  { shares: 64.45,  cost: 77.58 },
+  LLY:   { shares: 7,      cost: 919.53 },
+  MA:    { shares: 14.26,  cost: 490.84 },
+  HCA:   { shares: 16.19,  cost: 432.32 },
+  AVGO:  { shares: 12.82,  cost: 411.98 },
+  STX:   { shares: 6.30,   cost: 516.85 },
+  GOOGL: { shares: 13,     cost: 384.62 },
+  AXP:   { shares: 16.03,  cost: 311.87 },
+  AMD:   { shares: 8.68,   cost: 460.99 },
+  CEG:   { shares: 12.48,  cost: 320.43 },
+  QBTS:  { shares: 119.88, cost: 29.20 },
+  COHR:  { shares: 7.32,   cost: 341.66 },
+  ONDS:  { shares: 181.53, cost: 12.04 }
+};
+
+function loadPositions() {
+  try {
+    // Migration: if old positions had stocks we no longer track, force reset
+    const versionKey = 'kestrel_portfolio_version';
+    const currentVersion = '2-real-portfolio';
+    const storedVersion = localStorage.getItem(versionKey);
+
+    if (storedVersion !== currentVersion) {
+      // Wipe stale data when portfolio definition changes
+      localStorage.removeItem('kestrel_positions');
+      localStorage.removeItem('kestrel_news');
+      localStorage.removeItem('kestrel_earnings_v2');
+      localStorage.setItem(versionKey, currentVersion);
+    }
+
+    const p = localStorage.getItem('kestrel_positions');
+    if (p) {
+      positions = JSON.parse(p);
+    } else {
+      positions = JSON.parse(JSON.stringify(DEFAULT_POSITIONS));
+      try { localStorage.setItem('kestrel_positions', JSON.stringify(positions)); } catch {}
+    }
+    const c = localStorage.getItem('kestrel_cash');
+    if (c) cashAccount = JSON.parse(c);
+  } catch {}
+}
+function persistPositions() {
+  try {
+    localStorage.setItem('kestrel_positions', JSON.stringify(positions));
+    localStorage.setItem('kestrel_cash', JSON.stringify(cashAccount));
+  } catch {}
+}
+function hasAnyPositions() {
+  return Object.values(positions).some(p => p && p.shares > 0) || cashAccount.amount > 0;
+}
+
+function openSettings() {
+  const body = document.getElementById('settingsBody');
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:8px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">
+      <div>Stock</div><div>Shares</div><div>Avg Cost (per share)</div>
+    </div>
+    ${TICKERS.map(t => {
+      const p = positions[t] || {};
+      return `<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:8px;align-items:center;">
+        <div class="ticker">${t}</div>
+        <input type="number" id="set-sh-${t}" value="${p.shares || ''}" placeholder="0" step="any" style="background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:13px;">
+        <input type="number" id="set-cost-${t}" value="${p.cost || ''}" placeholder="0.00" step="any" style="background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:13px;">
+      </div>`;
+    }).join('')}
+  `;
+  document.getElementById('cashLabel').value = cashAccount.label || '';
+  document.getElementById('cashAmount').value = cashAccount.amount || '';
+  document.getElementById('settingsOverlay').classList.add('active');
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('active');
+}
+function savePositions() {
+  positions = {};
+  TICKERS.forEach(t => {
+    const sh = parseFloat(document.getElementById('set-sh-' + t).value);
+    const cost = parseFloat(document.getElementById('set-cost-' + t).value);
+    if (sh > 0) {
+      positions[t] = { shares: sh, cost: cost > 0 ? cost : null };
+    }
+  });
+  cashAccount = {
+    label: document.getElementById('cashLabel').value || '',
+    amount: parseFloat(document.getElementById('cashAmount').value) || 0
+  };
+  persistPositions();
+  closeSettings();
+  updatePortfolioStrip();
+  // refresh row UIs with new shares/value
+  TICKERS.forEach(t => {
+    if (state[t]) updateTickerUI(t, state[t], { score: state[t].score, breakdown: state[t].breakdown });
+  });
+}
+
+loadPositions();
+
+function updatePortfolioStrip() {
+  const strip = document.getElementById('portfolioStrip');
+  const empty = document.getElementById('emptyPositions');
+
+  if (!hasAnyPositions()) {
+    strip.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  strip.style.display = 'grid';
+  empty.style.display = 'none';
+
+  let stockValue = 0, dayDollar = 0, totalPnl = 0, totalCost = 0, hasCostData = false;
+  TICKERS.forEach(t => {
+    const pos = positions[t];
+    const q = state[t]?.quote;
+    if (!pos || !pos.shares || !q || !q.c) return;
+    stockValue += pos.shares * q.c;
+    dayDollar += pos.shares * (q.d || 0);
+    if (pos.cost && pos.cost > 0) {
+      totalPnl += (q.c - pos.cost) * pos.shares;
+      totalCost += pos.cost * pos.shares;
+      hasCostData = true;
+    }
+  });
+  const cashVal = cashAccount.amount || 0;
+  const totalValue = stockValue + cashVal;
+
+  document.getElementById('portValue').textContent = '$' + fmt(totalValue, 0);
+  document.getElementById('portValueSub').textContent = `$${fmt(stockValue, 0)} stocks + $${fmt(cashVal, 0)} cash`;
+  document.getElementById('portValueSub').className = 'card-change neutral';
+
+  const dayEl = document.getElementById('portDay');
+  dayEl.textContent = (dayDollar >= 0 ? '+$' : '-$') + fmt(Math.abs(dayDollar), 0);
+  dayEl.className = 'card-value ' + (dayDollar >= 0 ? 'pos' : 'neg');
+  const dayPct = stockValue > 0 ? (dayDollar / (stockValue - dayDollar)) * 100 : 0;
+  const daySub = document.getElementById('portDaySub');
+  daySub.textContent = (dayPct >= 0 ? '+' : '') + fmt(dayPct) + '% on stocks';
+  daySub.className = 'card-change ' + (dayDollar >= 0 ? 'pos' : 'neg');
+
+  const totEl = document.getElementById('portTotal');
+  const totSub = document.getElementById('portTotalSub');
+  if (hasCostData) {
+    totEl.textContent = (totalPnl >= 0 ? '+$' : '-$') + fmt(Math.abs(totalPnl), 0);
+    totEl.className = 'card-value ' + (totalPnl >= 0 ? 'pos' : 'neg');
+    const pnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+    totSub.textContent = (pnlPct >= 0 ? '+' : '') + fmt(pnlPct) + '% on invested capital';
+    totSub.className = 'card-change ' + (totalPnl >= 0 ? 'pos' : 'neg');
+  } else {
+    totEl.textContent = '—';
+    totEl.className = 'card-value neutral';
+    totSub.textContent = 'Add cost basis to track';
+    totSub.className = 'card-change neutral';
+  }
+
+  document.getElementById('portCash').textContent = '$' + fmt(cashVal, 0);
+  document.getElementById('portCashSub').textContent = cashAccount.label || 'Unlabeled';
+}
+
+// === FETCH ===
+async function fhQuote(t) { const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`); if(!r.ok)throw new Error('quote '+r.status); return r.json(); }
+async function fhRecommendations(t) { const r = await fetch(`https://finnhub.io/api/v1/stock/recommendation?symbol=${t}&token=${FINNHUB_KEY}`); return r.ok?r.json():[]; }
+async function fhPriceTarget(t) { const r = await fetch(`https://finnhub.io/api/v1/stock/price-target?symbol=${t}&token=${FINNHUB_KEY}`); return r.ok?r.json():{}; }
+async function fhInsider(t) {
+  const to = new Date().toISOString().slice(0,10);
+  const from = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+  const r = await fetch(`https://finnhub.io/api/v1/stock/insider-transactions?symbol=${t}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+  return r.ok?r.json():{data:[]};
+}
+async function fhNews(t) {
+  const to = new Date().toISOString().slice(0,10);
+  const from = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  const r = await fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+  return r.ok?r.json():[];
+}
+async function fmpEarningsCalendar(t) {
+  const r = await fetch(`https://financialmodelingprep.com/api/v3/historical/earning_calendar/${t}?apikey=${FMP_KEY}`);
+  if (!r.ok) return null;
+  const data = await r.json();
+  if (!Array.isArray(data) || !data.length) return null;
+  const today = new Date().toISOString().slice(0,10);
+  const upcoming = data.filter(e => e.date && e.date >= today).sort((a,b) => a.date.localeCompare(b.date));
+  if (!upcoming.length) return null;
+  const next = upcoming[0];
+  return {
+    date: next.date,
+    hour: next.time === 'bmo' ? 'bmo' : (next.time === 'amc' ? 'amc' : ''),
+    epsEstimate: next.epsEstimated,
+    revenueEstimate: next.revenueEstimated,
+    quarter: next.fiscalDateEnding ? Math.floor(new Date(next.fiscalDateEnding).getMonth() / 3) + 1 : null,
+    year: next.fiscalDateEnding ? new Date(next.fiscalDateEnding).getFullYear() : null
+  };
+}
+async function fmpUpgrades(t) { const r = await fetch(`https://financialmodelingprep.com/api/v3/upgrades-downgrades/${t}?apikey=${FMP_KEY}`); return r.ok?r.json():[]; }
+async function fmpEstimates(t) { const r = await fetch(`https://financialmodelingprep.com/api/v3/analyst-estimates/${t}?limit=4&apikey=${FMP_KEY}`); return r.ok?r.json():[]; }
+
+// NEW: Historical daily candles for technicals — 200 days
+async function fmpHistorical(t) {
+  const to = new Date().toISOString().slice(0,10);
+  const from = new Date(Date.now() - 250*86400000).toISOString().slice(0,10);
+  const r = await fetch(`https://financialmodelingprep.com/api/v3/historical-price-full/${t}?from=${from}&to=${to}&apikey=${FMP_KEY}`);
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data && data.historical ? data.historical : null;
+}
+
+// NEW: Historical earnings surprises
+async function fmpEarningsSurprises(t) {
+  const r = await fetch(`https://financialmodelingprep.com/api/v3/earnings-surprises/${t}?apikey=${FMP_KEY}`);
+  return r.ok ? r.json() : [];
+}
+
+// NEW: Short interest + 52w + beta from Finnhub metrics endpoint
+async function fhShortInterest(t) {
+  const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${FINNHUB_KEY}`);
+  if (!r.ok) return null;
+  const d = await r.json();
+  if (!d.metric) return null;
+  return {
+    shortRatio: d.metric.shortRatio,
+    shortPercent: d.metric.shortInterestSharesPercent || d.metric.shortInterestPercentFloat,
+    week52High: d.metric['52WeekHigh'],
+    week52Low: d.metric['52WeekLow'],
+    beta: d.metric.beta
+  };
+}
+
+// NEW: Price target history (look back to see direction of changes)
+async function fmpPriceTargetHistory(t) {
+  const r = await fetch(`https://financialmodelingprep.com/api/v4/price-target?symbol=${t}&apikey=${FMP_KEY}`);
+  return r.ok ? r.json() : [];
+}
+
+// === TECHNICAL ANALYSIS ===
+function calculateTechnicals(historical, currentPrice) {
+  if (!historical || historical.length < 50) return null;
+  // FMP returns newest first
+  const prices = historical.map(h => h.close).reverse(); // oldest -> newest
+  const n = prices.length;
+
+  // Moving averages
+  const sma20 = avg(prices.slice(-20));
+  const sma50 = avg(prices.slice(-50));
+  const sma200 = n >= 200 ? avg(prices.slice(-200)) : null;
+
+  // RSI (14)
+  const rsi = calculateRSI(prices, 14);
+
+  // Support / Resistance (50-day window)
+  const window = prices.slice(-50);
+  const support = Math.min(...window);
+  const resistance = Math.max(...window);
+
+  // 5-day, 20-day price change
+  const change5 = ((currentPrice - prices[n-6]) / prices[n-6]) * 100;
+  const change20 = ((currentPrice - prices[n-21]) / prices[n-21]) * 100;
+
+  // Volatility (20-day std dev as % of price)
+  const recent20 = prices.slice(-20);
+  const meanRecent = avg(recent20);
+  const variance = recent20.reduce((s,p) => s + Math.pow(p - meanRecent, 2), 0) / recent20.length;
+  const volatility = (Math.sqrt(variance) / meanRecent) * 100;
+
+  return {
+    sma20, sma50, sma200, rsi,
+    support, resistance,
+    change5, change20,
+    volatility,
+    aboveSma20: currentPrice > sma20,
+    aboveSma50: currentPrice > sma50,
+    aboveSma200: sma200 ? currentPrice > sma200 : null,
+    nearResistance: ((resistance - currentPrice) / currentPrice) * 100 < 3,
+    nearSupport: ((currentPrice - support) / currentPrice) * 100 < 3
+  };
+}
+
+function avg(arr) { return arr.reduce((s,v) => s + v, 0) / arr.length; }
+
+function calculateRSI(prices, period = 14) {
+  if (prices.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = prices.length - period; i < prices.length; i++) {
+    const diff = prices[i] - prices[i-1];
+    if (diff > 0) gains += diff; else losses -= diff;
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+// === AI FORECAST ===
+// Transparent ensemble: analyst target + momentum + technical mean-reversion
+// Returns null if we don't have enough data to make a meaningful forecast
+function calculateAIForecast(currentPrice, target, tech) {
+  if (!currentPrice) return null;
+
+  const hasTarget = target && target.targetMean > 0;
+  const hasTech = tech && (tech.change5 != null || tech.sma20);
+
+  // Need at least ONE real input (analyst target OR technicals)
+  // Otherwise we'd just return currentPrice across all horizons — misleading
+  if (!hasTarget && !hasTech) return null;
+
+  const analystAnchor = hasTarget ? target.targetMean : currentPrice;
+  const momentum5d = tech?.change5 || 0;
+  const momentumProjection = currentPrice * (1 + (momentum5d / 100) * 1.5);
+
+  let techProjection = currentPrice;
+  if (tech) {
+    if (tech.rsi > 70 && tech.sma20) {
+      techProjection = currentPrice + (tech.sma20 - currentPrice) * 0.4;
+    } else if (tech.rsi < 30 && tech.sma50) {
+      techProjection = currentPrice + (tech.sma50 - currentPrice) * 0.4;
+    } else if (tech.sma20) {
+      techProjection = currentPrice + (tech.sma20 - currentPrice) * 0.15;
+    }
+  }
+
+  const forecast7 = momentumProjection * 0.5 + techProjection * 0.4 + currentPrice * 0.1;
+  const forecast30 = momentumProjection * 0.3 + techProjection * 0.2 + analystAnchor * 0.5;
+  const forecast90 = momentumProjection * 0.1 + analystAnchor * 0.9;
+
+  return {
+    f7: forecast7,
+    f30: forecast30,
+    f90: forecast90,
+    f7Pct: ((forecast7 - currentPrice) / currentPrice) * 100,
+    f30Pct: ((forecast30 - currentPrice) / currentPrice) * 100,
+    f90Pct: ((forecast90 - currentPrice) / currentPrice) * 100,
+    hasTarget, hasTech,
+    components: { analystAnchor, momentumProjection, techProjection }
+  };
+}
+
+// === EARNINGS SURPRISE ANALYSIS ===
+function analyzeEarningsSurprises(surprises) {
+  if (!surprises || !surprises.length) return null;
+  const last8 = surprises.slice(0, 8);
+  const beats = last8.filter(s => s.actualEarningResult > s.estimatedEarning).length;
+  const meets = last8.filter(s => Math.abs(s.actualEarningResult - s.estimatedEarning) < 0.01).length;
+  const misses = last8.length - beats - meets;
+  const beatRate = (beats / last8.length) * 100;
+  const avgBeatPct = last8.reduce((s, q) => {
+    if (q.estimatedEarning && q.actualEarningResult) {
+      return s + ((q.actualEarningResult - q.estimatedEarning) / Math.abs(q.estimatedEarning)) * 100;
+    }
+    return s;
+  }, 0) / last8.length;
+
+  return {
+    beats, misses, meets,
+    total: last8.length,
+    beatRate,
+    avgBeatPct,
+    lastQuarter: last8[0]
+  };
+}
+
+const ANALYST_KEYWORDS = ['upgrade','downgrade','price target','raised target','cut target','buy rating','sell rating','hold rating','overweight','underweight','outperform','underperform','initiated','reiterates','maintains','goldman','morgan stanley','jpmorgan','wedbush','jefferies','bofa','bank of america','mizuho','citi','barclays','ubs','wells fargo','evercore','piper sandler','raymond james','oppenheimer','cantor','needham','rosenblatt','bernstein','analyst','rating'];
+function isAnalystHeadline(h) { const l = h.toLowerCase(); return ANALYST_KEYWORDS.some(k => l.includes(k)); }
+
+// === SIGNAL ANALYZERS ===
+
+// Target direction — parses upgrades feed for "raised target / cut target" actions in last 30d
+// Combines with current Finnhub target for a full picture
+function analyzeTargetActions(upgrades, currentTarget, currentPrice) {
+  let raised = 0, cut = 0, init = 0;
+  if (upgrades && upgrades.length) {
+    const cutoff = Date.now() - 30 * 86400000;
+    upgrades.filter(u => new Date(u.publishedDate || u.date).getTime() > cutoff).forEach(u => {
+      const action = (u.action || '').toLowerCase();
+      const ptPrev = parseFloat(u.priceWhenPosted) || null;
+      const ptNew = parseFloat(u.priceTarget) || null;
+      // Use explicit action keywords first
+      if (action.includes('raised') || action.includes('upgrade') || action.includes('raise')) raised++;
+      else if (action.includes('cut') || action.includes('lower') || action.includes('downgrade') || action.includes('reduce')) cut++;
+      else if (action.includes('initiat') || action.includes('reiterat')) init++;
+      // If we have both prev and new target, compare numerically
+      else if (ptPrev && ptNew) {
+        if (ptNew > ptPrev * 1.02) raised++;
+        else if (ptNew < ptPrev * 0.98) cut++;
+      }
+    });
+  }
+
+  let pillLabel = null, pillCls = null;
+  const total = raised + cut;
+  if (total >= 2) {
+    if (raised > cut * 1.5) { pillLabel = `${raised} raised`; pillCls = 'good'; }
+    else if (cut > raised * 1.5) { pillLabel = `${cut} cut`; pillCls = 'bad'; }
+    else { pillLabel = `${raised}↑ ${cut}↓`; pillCls = ''; }
+  } else if (raised >= 1 && cut === 0) {
+    pillLabel = '1 raised'; pillCls = 'good';
+  } else if (cut >= 1 && raised === 0) {
+    pillLabel = '1 cut'; pillCls = 'bad';
+  }
+
+  // Room vs target
+  let roomPct = null;
+  if (currentTarget && currentTarget.targetMean && currentPrice) {
+    roomPct = ((currentTarget.targetMean - currentPrice) / currentPrice) * 100;
+  }
+
+  if (!pillLabel && roomPct == null) return null;
+
+  return {
+    targetMean: currentTarget?.targetMean,
+    roomPct,
+    raised, cut, init,
+    pillLabel, pillCls
+  };
+}
+
+// Insider buying summary — 90 days
+// Honest version: buys are real signal, most sells are scheduled (10b5-1) and not signal
+// Excludes zero-price entries (RSU vests, stock grants, option exercises) — they're not real "buys"
+function analyzeInsiderBuying(insider) {
+  if (!insider || !insider.data || !insider.data.length) return null;
+
+  // Only count transactions with a real market price
+  const realTxns = insider.data.filter(i => i.transactionPrice > 0);
+  const buys = realTxns.filter(i => i.change > 0);
+  const sells = realTxns.filter(i => i.change < 0);
+  const uniqueBuyers = new Set(buys.map(b => b.name)).size;
+  const uniqueSellers = new Set(sells.map(s => s.name)).size;
+  const buyValue = buys.reduce((s,b) => s + Math.abs(b.change) * b.transactionPrice, 0);
+  const sellValue = sells.reduce((s,b) => s + Math.abs(b.change) * b.transactionPrice, 0);
+
+  let signal, cls;
+
+  // BUY signals (spending own cash by choice — real edge)
+  if (uniqueBuyers >= 3) { signal = 'Cluster Buy'; cls = 'good'; }
+  else if (uniqueBuyers >= 2) { signal = 'Buying'; cls = 'good'; }
+  else if (uniqueBuyers === 1 && buyValue > sellValue) { signal = '1 Buyer'; cls = 'good'; }
+
+  // SELL signals — very high bar. Most sells are scheduled 10b5-1 plans.
+  // Need: 8+ different sellers, no buying, $200M+ value, and sells outpace buys by 20x
+  else if (uniqueSellers >= 8 && uniqueBuyers === 0 && sellValue > 200_000_000 && sellValue > buyValue * 20) {
+    signal = 'Unusual selling'; cls = 'bad';
+  }
+  // Has sells but probably routine
+  else if (sells.length > 0 && uniqueBuyers === 0) {
+    signal = 'Routine sells'; cls = 'muted';
+  }
+  else if (buys.length > 0 || sells.length > 0) {
+    signal = 'Mixed'; cls = 'muted';
+  }
+  else {
+    signal = 'No activity'; cls = 'muted';
+  }
+
+  return {
+    signal, cls,
+    uniqueBuyers,
+    uniqueSellers,
+    buyValue, sellValue,
+    buys: buys.length, sells: sells.length
+  };
+}
+
+// Target direction — are analysts raising or cutting targets in last 90 days?
+function analyzeTargetDirection(history) {
+  if (!history || !Array.isArray(history) || history.length < 2) return null;
+  const cutoff = Date.now() - 90*86400000;
+  const recent = history.filter(h => {
+    const d = new Date(h.publishedDate || h.updatedAt || h.publishedDateTime);
+    return d.getTime() > cutoff && h.priceTarget && h.priceTarget > 0;
+  });
+  if (recent.length < 2) return null;
+
+  // Sort oldest to newest
+  recent.sort((a,b) => new Date(a.publishedDate || a.updatedAt) - new Date(b.publishedDate || b.updatedAt));
+
+  // Compare avg of first half to second half
+  const mid = Math.floor(recent.length / 2);
+  const oldAvg = recent.slice(0, mid).reduce((s,h) => s + h.priceTarget, 0) / mid;
+  const newAvg = recent.slice(mid).reduce((s,h) => s + h.priceTarget, 0) / (recent.length - mid);
+  const deltaPct = ((newAvg - oldAvg) / oldAvg) * 100;
+
+  let direction, cls;
+  if (deltaPct >= 5) { direction = 'Raising'; cls = 'good'; }
+  else if (deltaPct >= 2) { direction = 'Drifting up'; cls = 'good'; }
+  else if (deltaPct <= -5) { direction = 'Cutting'; cls = 'bad'; }
+  else if (deltaPct <= -2) { direction = 'Drifting down'; cls = 'bad'; }
+  else { direction = 'Stable'; cls = 'muted'; }
+
+  return { direction, cls, deltaPct, count: recent.length };
+}
+
+// % from 52-week high
+function analyze52wPosition(currentPrice, week52High, week52Low) {
+  if (!currentPrice || !week52High) return null;
+  const pctFromHigh = ((currentPrice - week52High) / week52High) * 100;
+  const pctFromLow = week52Low ? ((currentPrice - week52Low) / week52Low) * 100 : null;
+
+  let signal, cls;
+  if (pctFromHigh >= -2) { signal = 'At highs'; cls = 'good'; }
+  else if (pctFromHigh >= -10) { signal = 'Near highs'; cls = 'good'; }
+  else if (pctFromHigh >= -25) { signal = 'Mid-range'; cls = 'muted'; }
+  else if (pctFromHigh >= -40) { signal = 'Off highs'; cls = 'bad'; }
+  else { signal = 'Deep drawdown'; cls = 'bad'; }
+
+  return { signal, cls, pctFromHigh, pctFromLow, week52High, week52Low };
+}
+
+// Earnings beat streak — consecutive beats from most recent
+function analyzeBeatStreak(surprises) {
+  if (!surprises || !surprises.length) return null;
+  // surprises array is newest first
+  let streak = 0;
+  let streakType = null; // 'beat' or 'miss'
+  for (const q of surprises) {
+    if (!q.estimatedEarning || q.actualEarningResult == null) break;
+    const beat = q.actualEarningResult > q.estimatedEarning;
+    if (streakType === null) {
+      streakType = beat ? 'beat' : 'miss';
+      streak = 1;
+    } else if ((streakType === 'beat' && beat) || (streakType === 'miss' && !beat)) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  let cls;
+  if (streakType === 'beat' && streak >= 8) cls = 'good';
+  else if (streakType === 'beat' && streak >= 4) cls = 'good';
+  else if (streakType === 'beat') cls = 'neutral';
+  else if (streakType === 'miss' && streak >= 2) cls = 'bad';
+  else cls = 'muted';
+
+  return { streak, type: streakType, cls };
+}
+
+// Short interest summary
+function analyzeShortInterest(metrics) {
+  if (!metrics || metrics.shortPercent == null) return null;
+  const pct = metrics.shortPercent;
+  const dtc = metrics.shortRatio; // days to cover
+
+  let signal, cls;
+  if (pct >= 20) { signal = 'Squeeze setup'; cls = 'warn'; }   // very high short %
+  else if (pct >= 10) { signal = 'High'; cls = 'warn'; }
+  else if (pct >= 5) { signal = 'Moderate'; cls = 'neutral'; }
+  else if (pct >= 2) { signal = 'Low'; cls = 'muted'; }
+  else { signal = 'Very low'; cls = 'muted'; }
+
+  return { signal, cls, pct, daysToCover: dtc };
+}
+
+// === ANALYST DIRECT VERDICT ===
+// Extracts Wall Street's actual buy/sell/hold verdict from recommendation data
+function getAnalystVerdict(recs) {
+  if (!recs || !recs.length) return null;
+  const latest = recs[0];
+  const sb = latest.strongBuy || 0;
+  const b = latest.buy || 0;
+  const h = latest.hold || 0;
+  const s = latest.sell || 0;
+  const ss = latest.strongSell || 0;
+  const total = sb + b + h + s + ss;
+  if (total === 0) return null;
+
+  // Find the dominant verdict
+  const counts = [
+    { label: 'Strong Buy', count: sb, cls: 'signal-strong-buy', weight: 2 },
+    { label: 'Buy', count: b, cls: 'signal-buy', weight: 1 },
+    { label: 'Hold', count: h, cls: 'signal-hold', weight: 0 },
+    { label: 'Sell', count: s, cls: 'signal-trim', weight: -1 },
+    { label: 'Strong Sell', count: ss, cls: 'signal-sell', weight: -2 }
+  ];
+
+  // Combine Strong Buy + Buy as "bullish camp", same for sell
+  const bullish = sb + b;
+  const bearish = s + ss;
+  const neutral = h;
+
+  // Weighted average score (-2 to +2)
+  const weightedScore = (sb*2 + b*1 + h*0 + s*-1 + ss*-2) / total;
+
+  let consensus, cls;
+  if (weightedScore >= 1.4) { consensus = 'Strong Buy'; cls = 'signal-strong-buy'; }
+  else if (weightedScore >= 0.7) { consensus = 'Buy'; cls = 'signal-buy'; }
+  else if (weightedScore >= -0.3) { consensus = 'Hold'; cls = 'signal-hold'; }
+  else if (weightedScore >= -1.2) { consensus = 'Sell'; cls = 'signal-trim'; }
+  else { consensus = 'Strong Sell'; cls = 'signal-sell'; }
+
+  // Find which single category has the most votes (for "X of Y say Z" phrasing)
+  const sorted = [...counts].sort((a,b) => b.count - a.count);
+  const top = sorted[0];
+
+  return {
+    consensus, cls,
+    weightedScore,
+    total,
+    bullish, bearish, neutral,
+    strongBuy: sb, buy: b, hold: h, sell: s, strongSell: ss,
+    topCategory: top.label,
+    topCount: top.count,
+    summary: `${top.count} of ${total} analysts say ${top.label}`,
+    breakdown: `${sb} Strong Buy · ${b} Buy · ${h} Hold · ${s} Sell · ${ss} Strong Sell`
+  };
+}
+
+// === SCORING (9 signals, calibrated for real conviction) ===
+// Helper: sigmoid-like mapping that punches scores into the tails
+function stretch(linear) {
+  // Maps linear 0-10 to a curve that rewards extremes
+  // 5 stays at 5, 7 becomes 7.5, 8 becomes 8.7, 3 becomes 2.3, etc.
+  const centered = linear - 5;
+  const stretched = 5 + centered * 1.25 + Math.sign(centered) * Math.pow(Math.abs(centered)/5, 1.5) * 1.5;
+  return Math.max(0, Math.min(10, stretched));
+}
+
+function scoreTicker(t, data) {
+  const { quote, recs, target, upgrades, insider, estimates, tech, forecast, surprises } = data;
+  const breakdown = {};
+
+  // Track which signals have real data (for dynamic weighting)
+  const signals = {};
+
+  // 1. Analyst consensus + target upside
+  let analystScore = null;
+  if (target && target.targetMean && quote.c) {
+    const upsidePct = ((target.targetMean - quote.c) / quote.c) * 100;
+    // Calibrated: -15% -> 1, 0% -> 5, +15% -> 8, +30% -> 9.5, +50% -> 10
+    analystScore = 5 + (upsidePct / 4);
+    analystScore = Math.max(0, Math.min(10, analystScore));
+    breakdown.upside = upsidePct;
+  }
+  if (recs && recs.length) {
+    const latest = recs[0];
+    const total = latest.strongBuy + latest.buy + latest.hold + latest.sell + latest.strongSell;
+    if (total > 0) {
+      const bullPct = (latest.strongBuy * 1.5 + latest.buy * 0.7 - latest.sell * 0.7 - latest.strongSell * 1.5) / total;
+      const recScore = 5 + bullPct * 5;
+      analystScore = analystScore != null ? (analystScore + recScore) / 2 : recScore;
+      breakdown.consensus = `${latest.strongBuy} strong buy, ${latest.buy} buy, ${latest.hold} hold, ${latest.sell + latest.strongSell} sell`;
+    }
+  }
+  if (analystScore != null) {
+    signals.analyst = { score: stretch(analystScore), weight: 20 };
+    breakdown.analystScore = signals.analyst.score;
+  }
+
+  // 2. AI Forecast — based on 30d forecast
+  if (forecast && forecast.f30Pct != null) {
+    // -10% -> 2, 0% -> 5, +10% -> 8, +20% -> 10
+    let fs = 5 + (forecast.f30Pct / 3);
+    fs = Math.max(0, Math.min(10, fs));
+    signals.forecast = { score: stretch(fs), weight: 15 };
+    breakdown.forecast30 = forecast.f30Pct;
+    breakdown.forecastScore = signals.forecast.score;
+  }
+
+  // 3. Recent upgrades/downgrades
+  if (upgrades && upgrades.length) {
+    const cutoff = Date.now() - 30*86400000;
+    const recent = upgrades.filter(u => new Date(u.publishedDate || u.date).getTime() > cutoff);
+    if (recent.length > 0) {
+      let netActions = 0;
+      recent.forEach(u => {
+        const action = (u.action || '').toLowerCase();
+        if (action.includes('upgrade')) netActions++;
+        else if (action.includes('downgrade')) netActions--;
+      });
+      // 1 net upgrade -> 7, 2 -> 8.5, 3+ -> 10. Same in reverse.
+      let us = 5 + netActions * 2;
+      us = Math.max(0, Math.min(10, us));
+      signals.upgrade = { score: us, weight: 15 };
+      breakdown.recentActions = recent.length;
+      breakdown.netActions = netActions;
+      breakdown.upgradeScore = us;
+    }
+  }
+
+  // 4. Technical signals
+  if (tech) {
+    let pts = 5;
+    // Major trend (200-day)
+    if (tech.aboveSma200 === true) pts += 1.5;
+    else if (tech.aboveSma200 === false) pts -= 1.5;
+    // Medium trend (50-day)
+    if (tech.aboveSma50) pts += 0.8; else pts -= 0.8;
+    // Short trend (20-day)
+    if (tech.aboveSma20) pts += 0.5; else pts -= 0.5;
+    // RSI extremes — these are real edge
+    if (tech.rsi != null) {
+      if (tech.rsi > 75) pts -= 2;       // very overbought, real pullback risk
+      else if (tech.rsi > 65) pts -= 0.5;
+      else if (tech.rsi < 25) pts += 2;  // very oversold, real bounce setup
+      else if (tech.rsi < 35) pts += 0.5;
+    }
+    if (tech.nearSupport) pts += 0.8;
+    if (tech.nearResistance) pts -= 0.8;
+    const techScore = Math.max(0, Math.min(10, pts));
+    signals.tech = { score: techScore, weight: 12 };
+    breakdown.techScore = techScore;
+    breakdown.tech = tech;
+  }
+
+  // 5. Insider buying
+  if (insider && insider.data && insider.data.length > 0) {
+    const buys = insider.data.filter(i => i.change > 0 && i.transactionPrice > 0);
+    const sells = insider.data.filter(i => i.change < 0 && i.transactionPrice > 0);
+    const uniqueBuyers = new Set(buys.map(b => b.name)).size;
+    const uniqueSellers = new Set(sells.map(s => s.name)).size;
+    const buyValue = buys.reduce((s,b) => s + Math.abs(b.change) * b.transactionPrice, 0);
+    const sellValue = sells.reduce((s,b) => s + Math.abs(b.change) * b.transactionPrice, 0);
+
+    let insiderScore;
+    if (uniqueBuyers >= 3) insiderScore = 9.5;            // cluster buy = strong signal
+    else if (uniqueBuyers >= 2) insiderScore = 8;
+    else if (uniqueBuyers === 1 && buyValue > sellValue) insiderScore = 7;
+    else if (sellValue > buyValue * 5 && uniqueSellers >= 3) insiderScore = 1.5;  // cluster sell
+    else if (sellValue > buyValue * 3) insiderScore = 3;
+    else insiderScore = 5;
+
+    signals.insider = { score: insiderScore, weight: 10 };
+    breakdown.insiderBuys = buys.length;
+    breakdown.insiderSells = sells.length;
+    breakdown.uniqueBuyers = uniqueBuyers;
+    breakdown.insiderScore = insiderScore;
+  }
+
+  // 6. Earnings surprise history
+  if (surprises && surprises.total >= 4) {
+    // Beat 100% of time + big beats = 10. Beat 50% with mixed magnitude = 5. Miss often = 2.
+    let ss = (surprises.beatRate / 12) + (surprises.avgBeatPct / 2.5);
+    ss = Math.max(0, Math.min(10, ss + 3)); // shift baseline
+    signals.surprise = { score: ss, weight: 8 };
+    breakdown.beatRate = surprises.beatRate;
+    breakdown.beats = surprises.beats;
+    breakdown.misses = surprises.misses;
+    breakdown.avgBeatPct = surprises.avgBeatPct;
+    breakdown.surpriseScore = ss;
+  }
+
+  // 7. Profit forecast revisions
+  if (estimates && estimates.length >= 2) {
+    const latest = estimates[0]; const prior = estimates[1];
+    if (latest.estimatedEpsAvg && prior.estimatedEpsAvg) {
+      const delta = (latest.estimatedEpsAvg - prior.estimatedEpsAvg) / Math.abs(prior.estimatedEpsAvg);
+      // +5% revision -> 7.5, +10% -> 9, -5% -> 2.5
+      let rs = 5 + delta * 60;
+      rs = Math.max(0, Math.min(10, rs));
+      signals.revision = { score: rs, weight: 8 };
+      breakdown.epsRevision = delta * 100;
+      breakdown.revisionScore = rs;
+    }
+  }
+
+  // 8. Today's move (small weight, no stretch needed)
+  if (quote && !isNaN(quote.dp)) {
+    let ms = 5 + quote.dp * 0.4;
+    ms = Math.max(0, Math.min(10, ms));
+    signals.momentum = { score: ms, weight: 5 };
+    breakdown.dayMove = quote.dp;
+    breakdown.momentumScore = ms;
+  }
+
+  // 9. Macro fit
+  let macroScore = 5;
+  let macroHasData = false;
+  if (macroState.TNX) { macroScore += macroState.TNX.regime === 'good' ? 1 : macroState.TNX.regime === 'bad' ? -1 : 0; macroHasData = true; }
+  if (macroState.VIX) { macroScore += macroState.VIX.regime === 'good' ? 0.8 : macroState.VIX.regime === 'bad' ? -0.8 : 0; macroHasData = true; }
+  if (macroState.SOXX && ['NVDA','AVGO','MU','VRT','AMD','COHR','STX'].includes(t)) {
+    macroScore += macroState.SOXX.regime === 'good' ? 1.2 : macroState.SOXX.regime === 'bad' ? -1.2 : 0;
+  }
+  if (macroState.URA && ['CEG'].includes(t)) {
+    macroScore += macroState.URA.regime === 'good' ? 1.5 : macroState.URA.regime === 'bad' ? -1.5 : 0;
+  }
+  if (macroState.BTC && ['NBIS','RKLB','QBTS','ONDS'].includes(t)) {
+    macroScore += macroState.BTC.regime === 'good' ? 0.8 : macroState.BTC.regime === 'bad' ? -0.8 : 0;
+  }
+  if (macroHasData) {
+    macroScore = Math.max(0, Math.min(10, macroScore));
+    signals.macro = { score: macroScore, weight: 7 };
+    breakdown.macroScore = macroScore;
+  }
+
+  // === Composite with dynamic weighting ===
+  // Only signals with real data contribute; weights are renormalized
+  const presentSignals = Object.values(signals);
+  if (presentSignals.length === 0) {
+    return { score: 5, breakdown, coverage: 0 };
+  }
+  const totalWeight = presentSignals.reduce((s, sig) => s + sig.weight, 0);
+  const weightedSum = presentSignals.reduce((s, sig) => s + sig.score * sig.weight, 0);
+  const composite = weightedSum / totalWeight;
+
+  // Coverage = how much of the full signal set we actually have
+  const maxWeight = 100;
+  const coverage = totalWeight / maxWeight;
+  breakdown.coverage = coverage;
+  breakdown.signalsUsed = presentSignals.length;
+
+  return { score: composite, breakdown, coverage };
+}
+
+function verdictFor(score) {
+  if (score >= 7.0) return { cls: 'signal-strong-buy', label: 'Buy More' };
+  if (score >= 5.8) return { cls: 'signal-buy', label: 'Buy' };
+  if (score >= 4.2) return { cls: 'signal-hold', label: 'Hold' };
+  if (score >= 3.0) return { cls: 'signal-trim', label: 'Sell Some' };
+  return { cls: 'signal-sell', label: 'Sell' };
+}
+function scoreColor(score) { if(score>=6.0)return '#10b981'; if(score>=4.0)return '#6b7280'; return '#ef4444'; }
+
+const tbody = document.getElementById('holdingsBody');
+TICKERS.forEach(t => {
+  const tr = document.createElement('tr');
+  tr.id = 'row-' + t; tr.className = 'holding-row'; tr.onclick = () => openModal(t);
+  tr.innerHTML = `
+    <td class="ticker">${t}</td>
+    <td class="num" id="sh-${t}" style="color:var(--muted);">—</td>
+    <td class="num" id="price-${t}">—</td>
+    <td class="num" id="val-${t}" style="font-weight:600;">—</td>
+    <td class="num" id="pct-${t}">—</td>
+    <td class="num" id="pnl-${t}">—</td>
+    <td class="num" id="fc-${t}">—</td>
+    <td id="ws-${t}">—</td>
+    <td id="ins-${t}">—</td>
+    <td id="tgt-${t}">—</td>
+    <td id="beat-${t}">—</td>
+    <td id="short-${t}">—</td>
+    <td id="w52-${t}">—</td>
+    <td id="er-${t}" style="color:var(--muted);">—</td>
+  `;
+  tbody.appendChild(tr);
+});
+
+function setStatus(mode, text) {
+  document.getElementById('statusDot').className = 'dot ' + (mode === 'live' ? '' : mode);
+  document.getElementById('statusText').textContent = text;
+}
+function fmt(n, d=2) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function classifyMacro(label, value, change) {
+  if (label === 'TNX') return change < -0.5 ? 'good' : change > 0.5 ? 'bad' : 'neutral';
+  if (label === 'DXY') return change < -0.3 ? 'good' : change > 0.3 ? 'bad' : 'neutral';
+  if (label === 'VIX') { if (value < 18 && change < 0) return 'good'; if (value > 25 || change > 5) return 'bad'; return 'neutral'; }
+  if (label === 'SOXX') return change > 0.5 ? 'good' : change < -0.5 ? 'bad' : 'neutral';
+  if (label === 'URA') return change > 0.5 ? 'good' : change < -0.5 ? 'bad' : 'neutral';
+  if (label === 'BTC') return change > 1 ? 'good' : change < -1 ? 'bad' : 'neutral';
+  return 'neutral';
+}
+
+async function fetchMacro() {
+  for (const m of MACRO) {
+    try {
+      const q = await fhQuote(m.sym);
+      if (!q || !q.c) continue;
+      const regime = classifyMacro(m.label, q.c, q.dp);
+      macroState[m.label] = { value: q.c, change: q.dp, regime };
+      const card = document.getElementById('macro-' + m.label);
+      card.className = 'card regime-' + regime;
+      document.getElementById('val-' + m.label).textContent = m.label === 'TNX' ? fmt(q.c) + '%' : (m.label === 'BTC' ? '$' + fmt(q.c, 0) : fmt(q.c));
+      const chgEl = document.getElementById('chg-' + m.label);
+      chgEl.textContent = (q.dp >= 0 ? '+' : '') + fmt(q.dp) + '%';
+      chgEl.className = 'card-change ' + (q.dp >= 0 ? 'pos' : 'neg');
+    } catch (e) {}
+  }
+  document.getElementById('macroUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+async function fetchEarnings() {
+  for (const t of TICKERS) {
+    try {
+      const e = await fmpEarningsCalendar(t);
+      if (e) earningsState[t] = e;
+      await new Promise(r => setTimeout(r, 150));
+    } catch (e) {}
+  }
+  renderEarnings();
+  document.getElementById('earningsUpdated').textContent = 'Updated ' + new Date().toLocaleString();
+  try { localStorage.setItem('kestrel_earnings_v2', JSON.stringify({ data: earningsState, ts: Date.now() })); } catch {}
+}
+
+function loadCachedEarnings() {
+  try {
+    const cached = localStorage.getItem('kestrel_earnings_v2');
+    if (!cached) return false;
+    const parsed = JSON.parse(cached);
+    if (parsed.ts && (Date.now() - parsed.ts) < DAILY_REFRESH_MS) {
+      Object.assign(earningsState, parsed.data);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.floor((d - today) / 86400000);
+}
+
+function whenLabel(hour) {
+  if (!hour) return '';
+  if (hour === 'bmo') return 'Before market open';
+  if (hour === 'amc') return 'After market close';
+  if (hour === 'dmh') return 'During market hours';
+  return hour;
+}
+
+function renderEarnings() {
+  const list = TICKERS.map(t => ({ t, e: earningsState[t] })).filter(x => x.e && x.e.date)
+    .map(x => ({ ...x, days: daysUntil(x.e.date) })).filter(x => x.days !== null && x.days >= 0)
+    .sort((a,b) => a.days - b.days);
+
+  TICKERS.forEach(t => {
+    const cell = document.getElementById('er-' + t);
+    const found = list.find(x => x.t === t);
+    if (!cell) return;
+    if (found) {
+      const d = found.days;
+      if (d === 0) cell.innerHTML = '<span style="color:var(--red);font-weight:600;">TODAY</span>';
+      else if (d <= 7) cell.innerHTML = `<span style="color:var(--red);font-weight:600;">${d}d</span>`;
+      else if (d <= 21) cell.innerHTML = `<span style="color:var(--accent);font-weight:600;">${d}d</span>`;
+      else cell.innerHTML = `<span style="color:var(--muted);">${d}d</span>`;
+    } else cell.textContent = '—';
+  });
+
+  const box = document.getElementById('earningsBox');
+  if (!list.length) { box.className = 'placeholder'; box.textContent = 'No upcoming earnings found.'; return; }
+  box.className = '';
+  box.innerHTML = '<div class="grid grid-3" style="margin-bottom:0;">' +
+    list.slice(0, 12).map(x => {
+      const { t, e, days } = x;
+      const cls = days <= 7 ? 'urgent' : (days <= 21 ? 'soon' : 'later');
+      const daysLabel = days === 0 ? 'TODAY' : (days === 1 ? 'TOMORROW' : days + ' days');
+      const epsEst = e.epsEstimate != null ? '$' + fmt(e.epsEstimate) : '—';
+      const revEst = e.revenueEstimate ? '$' + fmt(e.revenueEstimate / 1e9, 2) + 'B' : '—';
+      return `<div class="earnings-card ${cls}">
+        <div class="earnings-top">
+          <div><div class="earnings-ticker">${t}</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">${whenLabel(e.hour)}</div></div>
+          <div class="earnings-when">
+            <div class="earnings-days" style="color:${days <= 7 ? 'var(--red)' : days <= 21 ? 'var(--accent)' : 'var(--text)'};">${daysLabel}</div>
+            <div class="earnings-date">${new Date(e.date).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</div>
+          </div>
+        </div>
+        <div class="earnings-stats">
+          <div><div class="earnings-stat-label">Profit Expected</div><div class="earnings-stat-value">${epsEst}</div></div>
+          <div><div class="earnings-stat-label">Revenue Expected</div><div class="earnings-stat-value">${revEst}</div></div>
+          <div><div class="earnings-stat-label">Quarter</div><div class="earnings-stat-value">Q${e.quarter || '?'} ${e.year || ''}</div></div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+async function fetchTickerData(t) {
+  const [quote, recs, target, insider, upgrades, estimates, historical, surprisesRaw, metrics, targetHistory] = await Promise.all([
+    fhQuote(t).catch(()=>null), fhRecommendations(t).catch(()=>[]),
+    fhPriceTarget(t).catch(()=>({})), fhInsider(t).catch(()=>({data:[]})),
+    fmpUpgrades(t).catch(()=>[]), fmpEstimates(t).catch(()=>[]),
+    fmpHistorical(t).catch(()=>null), fmpEarningsSurprises(t).catch(()=>[]),
+    fhShortInterest(t).catch(()=>null), fmpPriceTargetHistory(t).catch(()=>[])
+  ]);
+
+  const tech = historical && quote ? calculateTechnicals(historical, quote.c) : null;
+  const forecast = quote ? calculateAIForecast(quote.c, target, tech) : null;
+  const surprises = analyzeEarningsSurprises(surprisesRaw);
+  const wallStreet = getAnalystVerdict(recs);
+  const insiderSignal = analyzeInsiderBuying(insider);
+  const targetDir = analyzeTargetDirection(targetHistory);
+  const week52 = quote && metrics ? analyze52wPosition(quote.c, metrics.week52High, metrics.week52Low) : null;
+  const beatStreak = analyzeBeatStreak(surprisesRaw);
+  const shortInt = analyzeShortInterest(metrics);
+
+  return { quote, recs, target, insider, upgrades, estimates, tech, forecast, surprises, wallStreet,
+           insiderSignal, targetDir, week52, beatStreak, shortInt, metrics };
+}
+
+function trendCellHtml(tech) {
+  if (!tech) return '<span style="color:var(--muted);">—</span>';
+  const pills = [];
+  if (tech.aboveSma200 === true) pills.push('<span class="tech-pill good">Uptrend</span>');
+  else if (tech.aboveSma200 === false) pills.push('<span class="tech-pill bad">Downtrend</span>');
+  if (tech.rsi != null) {
+    if (tech.rsi > 70) pills.push('<span class="tech-pill warn">Overbought</span>');
+    else if (tech.rsi < 30) pills.push('<span class="tech-pill warn">Oversold</span>');
+  }
+  if (tech.nearResistance) pills.push('<span class="tech-pill warn">Near top</span>');
+  else if (tech.nearSupport) pills.push('<span class="tech-pill good">Near support</span>');
+  return '<div class="tech-pills">' + (pills.length ? pills.join('') : '<span class="tech-pill">Neutral</span>') + '</div>';
+}
+
+function updateTickerUI(t, data, scoring) {
+  const { quote, forecast, wallStreet, insiderSignal, targetAnalysis, week52, beatStreak, shortInt } = data;
+  const { score, breakdown } = scoring;
+  const prev = state[t]?.quote;
+  if (!quote || !quote.c) return;
+
+  document.getElementById('price-' + t).textContent = '$' + fmt(quote.c);
+
+  // Position-aware cells: shares, value, total P&L, today $
+  const pos = positions[t];
+  const shEl = document.getElementById('sh-' + t);
+  const valEl = document.getElementById('val-' + t);
+  const pctEl = document.getElementById('pct-' + t);
+  const pnlEl = document.getElementById('pnl-' + t);
+
+  if (pos && pos.shares > 0) {
+    shEl.textContent = fmt(pos.shares, pos.shares % 1 === 0 ? 0 : 2);
+    shEl.style.color = 'var(--text)';
+    const value = pos.shares * quote.c;
+    valEl.textContent = '$' + fmt(value, 0);
+    // Today's $ change for the position = shares * price change
+    const todayDollar = pos.shares * (quote.d || 0);
+    pctEl.textContent = (todayDollar >= 0 ? '+$' : '-$') + fmt(Math.abs(todayDollar), 0) + ` (${quote.dp>=0?'+':''}${fmt(quote.dp)}%)`;
+    pctEl.className = 'num ' + (todayDollar >= 0 ? 'pos' : 'neg');
+    // Total P&L = (current price - cost) * shares
+    if (pos.cost && pos.cost > 0) {
+      const pnl = (quote.c - pos.cost) * pos.shares;
+      const pnlPct = ((quote.c - pos.cost) / pos.cost) * 100;
+      pnlEl.innerHTML = `<div class="${pnl>=0?'pos':'neg'}" style="font-weight:600;">${pnl>=0?'+':'-'}$${fmt(Math.abs(pnl), 0)}</div><div class="${pnl>=0?'pos':'neg'}" style="font-size:11px;">${pnlPct>=0?'+':''}${fmt(pnlPct)}%</div>`;
+    } else {
+      pnlEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">No cost basis</span>';
+    }
+  } else {
+    shEl.textContent = '—';
+    shEl.style.color = 'var(--muted)';
+    valEl.textContent = '—';
+    pctEl.textContent = (quote.dp >= 0 ? '+' : '') + fmt(quote.dp) + '%';
+    pctEl.className = 'num ' + (quote.dp >= 0 ? 'pos' : 'neg');
+    pnlEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>';
+  }
+
+  // 30d forecast
+  const fcEl = document.getElementById('fc-' + t);
+  if (forecast) {
+    const dir = forecast.f30Pct >= 0 ? 'pos' : 'neg';
+    fcEl.innerHTML = `<div>$${fmt(forecast.f30)}</div><div class="${dir}" style="font-size:11px;">${forecast.f30Pct >= 0 ? '+' : ''}${fmt(forecast.f30Pct)}%</div>`;
+  } else {
+    fcEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">Data unavailable</span>';
+  }
+
+  // Wall Street verdict
+  const wsEl = document.getElementById('ws-' + t);
+  if (wallStreet) {
+    wsEl.innerHTML = `<span class="signal ${wallStreet.cls}">${wallStreet.consensus}</span><div style="font-size:10px;color:var(--muted);margin-top:3px;">${wallStreet.total} analysts</div>`;
+  } else wsEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">No coverage</span>';
+
+  // Insider buying
+  const insEl = document.getElementById('ins-' + t);
+  if (insiderSignal) {
+    insEl.innerHTML = `<span class="tech-pill ${insiderSignal.cls === 'good' ? 'good' : insiderSignal.cls === 'bad' ? 'bad' : insiderSignal.cls === 'warn' ? 'warn' : ''}">${insiderSignal.signal}</span>${insiderSignal.uniqueBuyers > 0 ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">${insiderSignal.uniqueBuyers} buyer${insiderSignal.uniqueBuyers>1?'s':''}</div>` : ''}`;
+  } else insEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>';
+
+  // Targets (price target + recent direction)
+  const tgtEl = document.getElementById('tgt-' + t);
+  if (targetAnalysis) {
+    const roomColor = targetAnalysis.roomPct == null ? 'var(--muted)' : targetAnalysis.roomPct >= 0 ? 'var(--green)' : 'var(--red)';
+    const targetLine = targetAnalysis.targetMean
+      ? `<div style="font-weight:600;">$${fmt(targetAnalysis.targetMean)}</div>`
+      : '';
+    const roomLine = targetAnalysis.roomPct != null
+      ? `<div style="color:${roomColor};font-size:11px;">${targetAnalysis.roomPct>=0?'+':''}${fmt(targetAnalysis.roomPct)}% room</div>`
+      : '';
+    const pillLine = targetAnalysis.pillLabel
+      ? `<div style="margin-top:3px;"><span class="tech-pill ${targetAnalysis.pillCls}">${targetAnalysis.pillLabel}</span></div>`
+      : '';
+    tgtEl.innerHTML = targetLine + roomLine + pillLine || '<span style="color:var(--muted);font-size:11px;">—</span>';
+  } else {
+    tgtEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>';
+  }
+
+  // Beat streak
+  const beatEl = document.getElementById('beat-' + t);
+  if (beatStreak && beatStreak.streak > 0) {
+    const cls = beatStreak.cls === 'good' ? 'good' : beatStreak.cls === 'bad' ? 'bad' : '';
+    const label = beatStreak.type === 'beat' ? `${beatStreak.streak}× beat` : `${beatStreak.streak}× miss`;
+    beatEl.innerHTML = `<span class="tech-pill ${cls}">${label}</span>`;
+  } else beatEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>';
+
+  // Short interest
+  const shortEl = document.getElementById('short-' + t);
+  if (shortInt) {
+    const cls = shortInt.cls === 'warn' ? 'warn' : shortInt.cls === 'good' ? 'good' : '';
+    shortEl.innerHTML = `<span class="tech-pill ${cls}">${fmt(shortInt.pct, 1)}%</span>${shortInt.daysToCover ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">${fmt(shortInt.daysToCover, 1)}d to cover</div>` : ''}`;
+  } else shortEl.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>';
+
+  // % from 52w high
+  const w52El = document.getElementById('w52-' + t);
+  if (week52) {
+    const cls = week52.pctFromHigh >= -10 ? 'pos' : week52.pctFromHigh >= -25 ? 'neutral' : 'neg';
+    w52El.innerHTML = `<div class="${cls}" style="font-weight:600;">${fmt(week52.pctFromHigh, 1)}%</div><div style="font-size:10px;color:var(--muted);margin-top:3px;">${week52.signal}</div>`;
+  } else w52El.innerHTML = '<span style="color:var(--muted);font-size:11px;">—</span>';
+
+  if (prev && prev.c !== quote.c) {
+    const row = document.getElementById('row-' + t);
+    row.classList.remove('flash-up','flash-down'); void row.offsetWidth;
+    row.classList.add(quote.c > prev.c ? 'flash-up' : 'flash-down');
+  }
+  state[t] = { ...data, score, breakdown };
+}
+
+async function fetchAllNews() {
+  const allNews = [];
+  for (const t of TICKERS) {
+    try {
+      const news = await fhNews(t);
+      news.forEach(n => allNews.push({ ticker: t, headline: n.headline, summary: n.summary, url: n.url, source: n.source, datetime: n.datetime, isAnalyst: isAnalystHeadline(n.headline) }));
+      await new Promise(r => setTimeout(r, 200));
+    } catch (e) {}
+  }
+  const seen = new Set();
+  const deduped = allNews.filter(n => { if (seen.has(n.headline)) return false; seen.add(n.headline); return true; });
+  deduped.sort((a, b) => {
+    const dayDiff = Math.floor(b.datetime/86400) - Math.floor(a.datetime/86400);
+    if (dayDiff !== 0) return dayDiff;
+    if (a.isAnalyst && !b.isAnalyst) return -1;
+    if (!a.isAnalyst && b.isAnalyst) return 1;
+    return b.datetime - a.datetime;
+  });
+  newsCache.items = deduped; newsCache.lastFetch = Date.now();
+  try { localStorage.setItem('kestrel_news', JSON.stringify(newsCache)); } catch {}
+  renderNews();
+}
+
+function renderNews() {
+  const box = document.getElementById('newsBox');
+  const items = newsCache.items;
+  if (!items || !items.length) { box.className = 'placeholder'; box.textContent = 'No news found.'; return; }
+  box.className = '';
+  box.innerHTML = items.slice(0, 15).map(n => {
+    const date = new Date(n.datetime * 1000);
+    return `<div class="news-item">
+      <div class="news-headline"><a href="${n.url}" target="_blank">${n.headline}</a></div>
+      <div class="news-meta"><span class="ticker">${n.ticker}</span>${n.isAnalyst ? '<span class="news-tag analyst">Analyst Call</span>' : ''}<span>${n.source}</span><span>•</span><span>${timeAgo(date)}</span></div>
+    </div>`;
+  }).join('');
+  document.getElementById('newsUpdated').textContent = 'Last fetched ' + new Date(newsCache.lastFetch).toLocaleString();
+}
+
+function timeAgo(date) {
+  const sec = (Date.now() - date.getTime()) / 1000;
+  if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+  if (sec < 86400) return Math.floor(sec/3600) + 'h ago';
+  return Math.floor(sec/86400) + 'd ago';
+}
+
+function shouldFetchNews() {
+  try {
+    const cached = localStorage.getItem('kestrel_news');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed.lastFetch && (Date.now() - parsed.lastFetch) < DAILY_REFRESH_MS) {
+        newsCache.items = parsed.items; newsCache.lastFetch = parsed.lastFetch;
+        return false;
+      }
+    }
+  } catch {}
+  return true;
+}
+
+function updateAggregateBoxes() {
+  const convBox = document.getElementById('convictionBox');
+  const convTitle = document.querySelector('#convictionBox').parentElement.querySelector('.section-title');
+
+  if (hasAnyPositions()) {
+    // === Concentration view: shows position size + Wall St verdict ===
+    convTitle.innerHTML = 'Your Concentration <span class="badge">By position size</span>';
+
+    let totalStockValue = 0;
+    const positionList = TICKERS.map(t => {
+      const pos = positions[t];
+      const q = state[t]?.quote;
+      if (!pos || !pos.shares || !q || !q.c) return null;
+      const value = pos.shares * q.c;
+      totalStockValue += value;
+      return { t, value, ws: state[t]?.wallStreet };
+    }).filter(Boolean).sort((a,b) => b.value - a.value);
+
+    if (positionList.length) {
+      convBox.className = '';
+      convBox.innerHTML = positionList.map(x => {
+        const pct = (x.value / totalStockValue) * 100;
+        const ws = x.ws ? `<span class="signal ${x.ws.cls}" style="font-size:9px;padding:2px 6px;">${x.ws.consensus}</span>` : '';
+        return `<div class="detail-list-item">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;"><span class="ticker">${x.t}</span><span style="font-size:11px;color:var(--muted);">$${fmt(x.value, 0)}</span></div>
+            <div style="margin-top:4px;height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden;">
+              <div style="height:100%;width:${pct.toFixed(1)}%;background:var(--accent);"></div>
+            </div>
+          </div>
+          <div style="text-align:right;min-width:80px;">
+            <div style="font-weight:700;">${fmt(pct, 1)}%</div>
+            ${ws}
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      convBox.className = 'placeholder';
+      convBox.textContent = 'Loading positions…';
+    }
+  } else {
+    // === Default: Wall Street ranking by consensus ===
+    convTitle.innerHTML = 'Wall Street Ranking <span class="badge">By consensus</span>';
+    const ranked = TICKERS
+      .map(t => ({ t, ws: state[t]?.wallStreet }))
+      .filter(x => x.ws)
+      .sort((a,b) => {
+        if (b.ws.weightedScore !== a.ws.weightedScore) return b.ws.weightedScore - a.ws.weightedScore;
+        return b.ws.total - a.ws.total;
+      });
+    if (ranked.length) {
+      convBox.className = '';
+      convBox.innerHTML = ranked.map((x, i) => `<div class="detail-list-item">
+        <div><span style="color:var(--muted);font-size:11px;margin-right:8px;">${i+1}.</span><span class="ticker">${x.t}</span><div style="font-size:10px;color:var(--muted);margin-top:2px;">${x.ws.total} analysts</div></div>
+        <div><span class="signal ${x.ws.cls}">${x.ws.consensus}</span></div>
+      </div>`).join('');
+    } else {
+      convBox.className = 'placeholder';
+      convBox.textContent = 'No analyst data available yet.';
+    }
+  }
+
+  // === Strong Signals auto-flag panel ===
+  const strongSignals = [];
+  TICKERS.forEach(t => {
+    const d = state[t];
+    if (!d) return;
+    if (d.insiderSignal && d.insiderSignal.signal === 'Cluster Buy') {
+      strongSignals.push({ t, kind: 'good', label: `Insider cluster buy (${d.insiderSignal.uniqueBuyers} buyers)`, weight: 100 });
+    }
+    if (d.targetAnalysis && d.targetAnalysis.raised >= 3 && d.targetAnalysis.raised > d.targetAnalysis.cut * 2) {
+      strongSignals.push({ t, kind: 'good', label: `${d.targetAnalysis.raised} analysts raised targets`, weight: 80 });
+    }
+    if (d.beatStreak && d.beatStreak.type === 'beat' && d.beatStreak.streak >= 8) {
+      strongSignals.push({ t, kind: 'good', label: `${d.beatStreak.streak} straight earnings beats`, weight: 70 });
+    }
+    if (d.shortInt && d.shortInt.pct >= 20) {
+      strongSignals.push({ t, kind: 'warn', label: `Squeeze setup (${fmt(d.shortInt.pct, 1)}% short)`, weight: 90 });
+    }
+    if (d.week52 && d.week52.signal === 'At highs') {
+      strongSignals.push({ t, kind: 'good', label: `At 52-week high`, weight: 60 });
+    }
+    if (d.week52 && d.week52.signal === 'Deep drawdown') {
+      strongSignals.push({ t, kind: 'bad', label: `Deep drawdown (${fmt(d.week52.pctFromHigh)}% from high)`, weight: 60 });
+    }
+    if (d.insiderSignal && d.insiderSignal.signal === 'Unusual selling') {
+      strongSignals.push({ t, kind: 'bad', label: `Unusual insider selling`, weight: 85 });
+    }
+    if (d.targetAnalysis && d.targetAnalysis.cut >= 3 && d.targetAnalysis.cut > d.targetAnalysis.raised * 2) {
+      strongSignals.push({ t, kind: 'bad', label: `${d.targetAnalysis.cut} analysts cut targets`, weight: 80 });
+    }
+    if (d.beatStreak && d.beatStreak.type === 'miss' && d.beatStreak.streak >= 2) {
+      strongSignals.push({ t, kind: 'bad', label: `${d.beatStreak.streak} straight earnings misses`, weight: 70 });
+    }
+  });
+  strongSignals.sort((a,b) => b.weight - a.weight);
+
+  const sigBox = document.getElementById('signalsBox');
+  if (strongSignals.length) {
+    sigBox.className = '';
+    sigBox.innerHTML = strongSignals.slice(0, 10).map(s => {
+      const cls = s.kind === 'good' ? 'good' : s.kind === 'bad' ? 'bad' : 'warn';
+      return `<div class="detail-list-item">
+        <div><span class="ticker">${s.t}</span></div>
+        <div><span class="tech-pill ${cls}">${s.label}</span></div>
+      </div>`;
+    }).join('');
+  } else {
+    sigBox.className = 'placeholder';
+    sigBox.textContent = 'No standout signals across your book right now.';
+  }
+
+  const allActions = [];
+  TICKERS.forEach(t => {
+    const ups = state[t]?.upgrades || [];
+    const cutoff = Date.now() - 30*86400000;
+    ups.filter(u => new Date(u.publishedDate || u.date).getTime() > cutoff).forEach(u => allActions.push({ t, ...u }));
+  });
+  allActions.sort((a,b) => new Date(b.publishedDate || b.date) - new Date(a.publishedDate || a.date));
+  const analystBox = document.getElementById('analystBox');
+  if (allActions.length) {
+    analystBox.className = '';
+    analystBox.innerHTML = `<table style="width:100%;">
+      <thead><tr><th>Stock</th><th>Bank/Firm</th><th>What Changed</th><th>Action</th><th>Date</th></tr></thead>
+      <tbody>
+      ${allActions.slice(0, 15).map(a => {
+        const action = (a.action || '').toLowerCase();
+        const isUp = action.includes('upgrade') || action.includes('initiate');
+        const isDown = action.includes('downgrade');
+        const cls = isUp ? 'pos' : (isDown ? 'neg' : 'neutral');
+        const arrow = isUp ? '↑' : (isDown ? '↓' : '→');
+        return `<tr>
+          <td class="ticker">${a.t}</td>
+          <td>${a.gradingCompany || a.company || '?'}</td>
+          <td>${a.previousGrade || '?'} → ${a.newGrade || '?'}</td>
+          <td class="${cls}" style="font-weight:600;">${arrow} ${a.action || '—'}</td>
+          <td style="color:var(--muted);">${new Date(a.publishedDate || a.date).toLocaleDateString()}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>`;
+  } else { analystBox.className = 'placeholder'; analystBox.textContent = 'No Wall Street actions in the last 30 days.'; }
+  const allInsiders = [];
+  TICKERS.forEach(t => {
+    const ins = state[t]?.insider?.data || [];
+    ins.filter(i => i.transactionPrice > 0).forEach(i => allInsiders.push({ t, ...i }));
+  });
+  allInsiders.sort((a,b) => new Date(b.transactionDate || b.filingDate) - new Date(a.transactionDate || a.filingDate));
+  const insBox = document.getElementById('insiderBox');
+  if (allInsiders.length) {
+    insBox.className = '';
+    insBox.innerHTML = allInsiders.slice(0, 8).map(i => {
+      const isBuy = i.change > 0;
+      const cls = isBuy ? 'pos' : 'neg';
+      const value = Math.abs(i.change || 0) * (i.transactionPrice || 0);
+      return `<div class="detail-list-item">
+        <div><span class="ticker">${i.t}</span><span style="color:var(--muted);font-size:11px;margin-left:6px;">${(i.name || '').substring(0,22)}</span></div>
+        <div style="text-align:right;">
+          <div class="${cls}" style="font-weight:600;">${isBuy ? 'BOUGHT' : 'SOLD'} $${fmt(value, 0)}</div>
+          <div style="font-size:11px;color:var(--muted);">${i.transactionDate || ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } else { insBox.className = 'placeholder'; insBox.textContent = 'No recent insider trades.'; }
+}
+
+function openModal(t) {
+  const d = state[t];
+  if (!d) return;
+  const { quote, target, upgrades, insider, score, breakdown, tech, forecast, surprises, wallStreet } = d;
+  const earnings = earningsState[t];
+  const days = earnings ? daysUntil(earnings.date) : null;
+
+  const html = `
+    <div class="modal-header">
+      <div>
+        <div class="modal-ticker">${t}</div>
+        <div style="color:var(--muted);font-size:14px;margin-top:4px;">$${fmt(quote.c)} <span class="${quote.dp>=0?'pos':'neg'}">${quote.dp>=0?'+':''}${fmt(quote.dp)}%</span></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+
+    <div style="padding:18px;background:var(--panel-2);border-radius:12px;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Wall Street Verdict</div>
+      ${wallStreet ? `
+        <div><span class="signal ${wallStreet.cls}" style="font-size:14px;padding:6px 14px;">${wallStreet.consensus}</span></div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text);">${wallStreet.total} analysts cover this stock</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted);line-height:1.6;">${wallStreet.breakdown}</div>
+      ` : `<div style="color:var(--muted);font-size:13px;padding:10px 0;">No analyst coverage available</div>`}
+    </div>
+
+    ${forecast ? `
+    <div class="forecast-box">
+      <div class="forecast-header">⌬ AI Price Forecast</div>
+      <div class="forecast-grid">
+        <div class="forecast-cell">
+          <div class="forecast-label">7-Day</div>
+          <div class="forecast-price">$${fmt(forecast.f7)}</div>
+          <div class="forecast-pct ${forecast.f7Pct>=0?'pos':'neg'}">${forecast.f7Pct>=0?'+':''}${fmt(forecast.f7Pct)}%</div>
+        </div>
+        <div class="forecast-cell">
+          <div class="forecast-label">30-Day</div>
+          <div class="forecast-price">$${fmt(forecast.f30)}</div>
+          <div class="forecast-pct ${forecast.f30Pct>=0?'pos':'neg'}">${forecast.f30Pct>=0?'+':''}${fmt(forecast.f30Pct)}%</div>
+        </div>
+        <div class="forecast-cell">
+          <div class="forecast-label">90-Day</div>
+          <div class="forecast-price">$${fmt(forecast.f90)}</div>
+          <div class="forecast-pct ${forecast.f90Pct>=0?'pos':'neg'}">${forecast.f90Pct>=0?'+':''}${fmt(forecast.f90Pct)}%</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;text-align:center;">
+        Combines ${forecast.hasTarget && forecast.hasTech ? 'analyst targets + recent momentum + technical signals' : forecast.hasTarget ? 'analyst targets only — momentum data missing' : 'recent momentum + technical signals only — no analyst target available'}
+      </div>
+    </div>` : `
+    <div class="forecast-box" style="opacity:0.6;">
+      <div class="forecast-header">⌬ AI Price Forecast</div>
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">
+        Forecast unavailable — neither analyst target nor historical price data loaded for this stock.
+        <div style="font-size:11px;margin-top:6px;">Try refreshing in a moment.</div>
+      </div>
+    </div>`}
+
+    ${tech ? `
+    <div class="detail-section">
+      <h3>Trend &amp; Technical Picture</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+        <div class="score-row" style="grid-template-columns:1fr auto;">
+          <div><div class="score-row-label">20-day average</div><div class="score-row-weight">${tech.aboveSma20 ? 'Price is above (uptrend)' : 'Price is below (downtrend)'}</div></div>
+          <div class="score-row-value">$${fmt(tech.sma20)}</div>
+        </div>
+        <div class="score-row" style="grid-template-columns:1fr auto;">
+          <div><div class="score-row-label">50-day average</div><div class="score-row-weight">${tech.aboveSma50 ? 'Above (medium-term up)' : 'Below (medium-term down)'}</div></div>
+          <div class="score-row-value">$${fmt(tech.sma50)}</div>
+        </div>
+        <div class="score-row" style="grid-template-columns:1fr auto;">
+          <div><div class="score-row-label">200-day average</div><div class="score-row-weight">${tech.aboveSma200 === true ? 'Above (long-term bull)' : tech.aboveSma200 === false ? 'Below (long-term bear)' : '—'}</div></div>
+          <div class="score-row-value">${tech.sma200 ? '$'+fmt(tech.sma200) : '—'}</div>
+        </div>
+        <div class="score-row" style="grid-template-columns:1fr auto;">
+          <div><div class="score-row-label">RSI (overbought/oversold)</div><div class="score-row-weight">${tech.rsi > 70 ? 'Overbought (possible pullback)' : tech.rsi < 30 ? 'Oversold (possible bounce)' : 'Neutral range'}</div></div>
+          <div class="score-row-value">${tech.rsi != null ? fmt(tech.rsi, 0) : '—'}</div>
+        </div>
+        <div class="score-row" style="grid-template-columns:1fr auto;">
+          <div><div class="score-row-label">Support level</div><div class="score-row-weight">50-day low${tech.nearSupport ? ' · price is near it' : ''}</div></div>
+          <div class="score-row-value">$${fmt(tech.support)}</div>
+        </div>
+        <div class="score-row" style="grid-template-columns:1fr auto;">
+          <div><div class="score-row-label">Resistance level</div><div class="score-row-weight">50-day high${tech.nearResistance ? ' · price is near it' : ''}</div></div>
+          <div class="score-row-value">$${fmt(tech.resistance)}</div>
+        </div>
+      </div>
+    </div>` : ''}
+
+    ${surprises ? `
+    <div class="detail-section">
+      <h3>Earnings Track Record (Last ${surprises.total} Quarters)</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div class="forecast-cell" style="background:rgba(16,185,129,0.08);">
+          <div class="forecast-label">Beats</div>
+          <div class="forecast-price pos">${surprises.beats}</div>
+          <div class="forecast-pct" style="color:var(--muted);">${fmt(surprises.beatRate, 0)}% of time</div>
+        </div>
+        <div class="forecast-cell">
+          <div class="forecast-label">Misses</div>
+          <div class="forecast-price neg">${surprises.misses}</div>
+          <div class="forecast-pct" style="color:var(--muted);">vs estimates</div>
+        </div>
+        <div class="forecast-cell">
+          <div class="forecast-label">Avg Beat</div>
+          <div class="forecast-price ${surprises.avgBeatPct>=0?'pos':'neg'}">${surprises.avgBeatPct>=0?'+':''}${fmt(surprises.avgBeatPct)}%</div>
+          <div class="forecast-pct" style="color:var(--muted);">vs estimate</div>
+        </div>
+      </div>
+    </div>` : ''}
+
+    ${earnings && days !== null && days >= 0 ? `
+    <div class="detail-section">
+      <h3>Next Earnings Report</h3>
+      <div class="earnings-card ${days<=7?'urgent':days<=21?'soon':'later'}" style="margin-bottom:0;">
+        <div class="earnings-top">
+          <div>
+            <div style="font-weight:600;">${new Date(earnings.date).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' })}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${whenLabel(earnings.hour)}</div>
+          </div>
+          <div class="earnings-when">
+            <div class="earnings-days" style="color:${days<=7?'var(--red)':days<=21?'var(--accent)':'var(--text)'};">${days === 0 ? 'TODAY' : days + 'd'}</div>
+          </div>
+        </div>
+        <div class="earnings-stats">
+          <div><div class="earnings-stat-label">Profit Expected</div><div class="earnings-stat-value">${earnings.epsEstimate != null ? '$'+fmt(earnings.epsEstimate) : '—'}</div></div>
+          <div><div class="earnings-stat-label">Revenue Expected</div><div class="earnings-stat-value">${earnings.revenueEstimate ? '$'+fmt(earnings.revenueEstimate / 1e9, 2)+'B' : '—'}</div></div>
+          <div><div class="earnings-stat-label">Quarter</div><div class="earnings-stat-value">Q${earnings.quarter || '?'} ${earnings.year || ''}</div></div>
+        </div>
+      </div>
+    </div>` : ''}
+
+    ${upgrades && upgrades.length ? `
+    <div class="detail-section">
+      <h3>What Wall Street Said Recently</h3>
+      <div class="detail-list">
+        ${upgrades.slice(0, 5).map(u => `
+          <div class="detail-list-item">
+            <div><strong>${u.gradingCompany || u.company || '?'}</strong> — ${u.previousGrade || '?'} → ${u.newGrade || '?'}</div>
+            <div style="color:var(--muted);font-size:12px;">${new Date(u.publishedDate || u.date).toLocaleDateString()}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    ${insider && insider.data && insider.data.filter(i => i.transactionPrice > 0).length ? `
+    <div class="detail-section">
+      <h3>What Insiders Did Recently</h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Open-market trades only — RSU vests and stock grants excluded</div>
+      <div class="detail-list">
+        ${insider.data.filter(i => i.transactionPrice > 0).slice(0, 5).map(i => {
+          const isBuy = i.change > 0;
+          return `<div class="detail-list-item">
+            <div>${(i.name || '').substring(0,30)}</div>
+            <div class="${isBuy?'pos':'neg'}" style="font-weight:600;">${isBuy?'BOUGHT':'SOLD'} ${fmt(Math.abs(i.change), 0)} shares @ $${fmt(i.transactionPrice)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+  `;
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+
+// === TIERED FETCH ARCHITECTURE ===
+// Live (15s):   quotes only — small, fast
+// Signals (1h): heavy data (insider, upgrades, estimates, surprises, metrics) — cached
+// Daily:        news, earnings calendar — cached
+
+const SIGNALS_CACHE_MS = 60 * 60 * 1000; // 1 hour
+const LIVE_REFRESH_MS = 15000; // 15 seconds for prices
+const signalsCache = {};
+
+function loadSignalsCache() {
+  try {
+    const c = localStorage.getItem('kestrel_signals_v3');
+    if (c) {
+      const parsed = JSON.parse(c);
+      if (parsed.ts && (Date.now() - parsed.ts) < SIGNALS_CACHE_MS) {
+        Object.assign(signalsCache, parsed.data);
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+function saveSignalsCache() {
+  try { localStorage.setItem('kestrel_signals_v3', JSON.stringify({ data: signalsCache, ts: Date.now() })); } catch {}
+}
+
+// Heavy data fetch — runs once per hour
+async function fetchSignalsForTicker(t) {
+  const [recs, target, insider, upgrades, estimates, historical, surprisesRaw, metrics] = await Promise.all([
+    fhRecommendations(t).catch(()=>[]),
+    fhPriceTarget(t).catch(()=>({})),
+    fhInsider(t).catch(()=>({data:[]})),
+    fmpUpgrades(t).catch(()=>[]),
+    fmpEstimates(t).catch(()=>[]),
+    fmpHistorical(t).catch(()=>null),
+    fmpEarningsSurprises(t).catch(()=>[]),
+    fhShortInterest(t).catch(()=>null)
+  ]);
+  return { recs, target, insider, upgrades, estimates, historical, surprisesRaw, metrics };
+}
+
+async function fetchAllSignals() {
+  setStatus('live', 'Loading signals…');
+  // Run all 21 tickers in parallel — Finnhub allows 60/sec
+  const results = await Promise.all(TICKERS.map(async t => {
+    try {
+      return { t, data: await fetchSignalsForTicker(t) };
+    } catch (e) {
+      return { t, data: null };
+    }
+  }));
+  results.forEach(({ t, data }) => {
+    if (data) signalsCache[t] = data;
+  });
+  saveSignalsCache();
+}
+
+// Live quote fetch — runs every 15s
+async function fetchAllQuotes(manual=false) {
+  setStatus('live', manual ? 'Refreshing…' : 'Updating…');
+  try {
+    await fetchMacro();
+    // All quotes in parallel
+    const quotes = await Promise.all(TICKERS.map(t => fhQuote(t).catch(() => null)));
+
+    TICKERS.forEach((t, i) => {
+      const quote = quotes[i];
+      if (!quote || !quote.c) return;
+
+      // Merge live quote with cached signals
+      const sig = signalsCache[t] || {};
+      const tech = sig.historical && quote ? calculateTechnicals(sig.historical, quote.c) : null;
+      const forecast = quote ? calculateAIForecast(quote.c, sig.target, tech) : null;
+      const surprises = analyzeEarningsSurprises(sig.surprisesRaw);
+      const wallStreet = getAnalystVerdict(sig.recs);
+      const insiderSignal = analyzeInsiderBuying(sig.insider);
+      const week52 = quote && sig.metrics ? analyze52wPosition(quote.c, sig.metrics.week52High, sig.metrics.week52Low) : null;
+      const beatStreak = analyzeBeatStreak(sig.surprisesRaw);
+      const shortInt = analyzeShortInterest(sig.metrics);
+      const targetAnalysis = analyzeTargetActions(sig.upgrades, sig.target, quote.c);
+      // Target direction — use Finnhub price target history if available (free endpoint)
+      const targetDir = null; // disabled — was using broken FMP paid endpoint
+
+      const data = {
+        quote, recs: sig.recs, target: sig.target, insider: sig.insider,
+        upgrades: sig.upgrades, estimates: sig.estimates,
+        tech, forecast, surprises, wallStreet,
+        insiderSignal, targetDir, targetAnalysis, week52, beatStreak, shortInt,
+        metrics: sig.metrics
+      };
+      const scoring = scoreTicker(t, data);
+      updateTickerUI(t, data, scoring);
+    });
+
+    updateAggregateBoxes();
+    updatePortfolioStrip();
+    document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    setStatus('live', 'Live');
+  } catch (e) { console.error(e); setStatus('err', 'Error: ' + e.message); }
+}
+
+// Compatibility alias for the Refresh button
+async function fetchAll(manual=false) {
+  await fetchAllQuotes(manual);
+}
+
+// Show empty state immediately on load if no positions
+updatePortfolioStrip();
+
+// Boot sequence
+(async () => {
+  // Try cached signals first
+  const hadCache = loadSignalsCache();
+  if (!hadCache) {
+    // Fetch signals first time (~30 sec for 21 tickers in parallel)
+    await fetchAllSignals();
+  }
+  // Then start live quote loop
+  fetchAllQuotes();
+  setInterval(fetchAllQuotes, LIVE_REFRESH_MS);
+  // Refresh signals every hour in the background
+  setInterval(async () => {
+    await fetchAllSignals();
+    fetchAllQuotes();
+  }, SIGNALS_CACHE_MS);
+})();
+
+if (loadCachedEarnings()) renderEarnings(); else fetchEarnings();
+if (shouldFetchNews()) fetchAllNews(); else renderNews();
+setInterval(() => {
+  if (shouldFetchNews()) fetchAllNews();
+  if (!loadCachedEarnings()) fetchEarnings();
+}, 60 * 60 * 1000);
+</script>
+
+</body>
+</html>
