@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kestrel — Portfolio Intelligence</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f59e0b'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='20' font-weight='700' text-anchor='middle' fill='%230a0e14'%3EK%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #0a0e14; --panel: #11161f; --panel-2: #161c28;
@@ -269,10 +270,13 @@
 const FINNHUB_KEY = 'd8athjpr01qk20soo93gd8athjpr01qk20soo940';
 const FMP_KEY = '5A4t09ebp9hJYpwuU93vLdccIapNSCnz';
 const TICKERS = ['MU','SPY','NBIS','VRT','V','GLD','CAT','NVDA','RKLB','LLY','MA','HCA','AVGO','STX','GOOGL','AXP','AMD','CEG','QBTS','COHR','ONDS'];
+// Finnhub free tier doesn't quote CFD indices (^TNX, ^VIX) or BTC-USD —
+// proxy via free-tier-friendly ETFs: TLT inversely tracks long rates, UVXY
+// tracks short-vol futures, IBIT is a spot BTC ETF.
 const MACRO = [
-  { sym: '^TNX', label: 'TNX' }, { sym: 'UUP', label: 'DXY' },
-  { sym: '^VIX', label: 'VIX' }, { sym: 'SOXX', label: 'SOXX' },
-  { sym: 'URA', label: 'URA' }, { sym: 'BTC-USD', label: 'BTC' }
+  { sym: 'TLT', label: 'TNX' }, { sym: 'UUP', label: 'DXY' },
+  { sym: 'UVXY', label: 'VIX' }, { sym: 'SOXX', label: 'SOXX' },
+  { sym: 'URA', label: 'URA' }, { sym: 'IBIT', label: 'BTC' }
 ];
 const REFRESH_MS = 60000;
 const DAILY_REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -453,61 +457,59 @@ function updatePortfolioStrip() {
 }
 
 // === FETCH ===
-async function fhQuote(t) { const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`); if(!r.ok)throw new Error('quote '+r.status); return r.json(); }
-async function fhRecommendations(t) { const r = await fetch(`https://finnhub.io/api/v1/stock/recommendation?symbol=${t}&token=${FINNHUB_KEY}`); return r.ok?r.json():[]; }
-async function fhPriceTarget(t) { const r = await fetch(`https://finnhub.io/api/v1/stock/price-target?symbol=${t}&token=${FINNHUB_KEY}`); return r.ok?r.json():{}; }
+// Finnhub free tier = 60 req/min. Serialize calls with a min gap; on 429, pause
+// the whole queue briefly (rate-limit cooldown) rather than retrying inline,
+// which multiplies traffic and makes the limit worse.
+const fhFetch = (() => {
+  const MIN_GAP_MS = 1100;     // ~54 req/min sustained
+  const COOLDOWN_MS = 20000;   // pause queue if a 429 lands
+  let lastSent = 0;
+  let cooldownUntil = 0;
+  let chain = Promise.resolve();
+  return (url, opts) => {
+    const p = chain.then(async () => {
+      const now = Date.now();
+      const gapWait = Math.max(0, MIN_GAP_MS - (now - lastSent));
+      const coolWait = Math.max(0, cooldownUntil - now);
+      const wait = Math.max(gapWait, coolWait);
+      if (wait) await new Promise(r => setTimeout(r, wait));
+      lastSent = Date.now();
+      const r = await fetch(url, opts);
+      if (r.status === 429) cooldownUntil = Date.now() + COOLDOWN_MS;
+      return r;
+    });
+    chain = p.catch(() => {});
+    return p;
+  };
+})();
+async function fhQuote(t) { const r = await fhFetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`); if(!r.ok)throw new Error('quote '+r.status); return r.json(); }
+async function fhRecommendations(t) { const r = await fhFetch(`https://finnhub.io/api/v1/stock/recommendation?symbol=${t}&token=${FINNHUB_KEY}`); return r.ok?r.json():[]; }
+async function fhPriceTarget(t) { const r = await fhFetch(`https://finnhub.io/api/v1/stock/price-target?symbol=${t}&token=${FINNHUB_KEY}`); return r.ok?r.json():{}; }
 async function fhInsider(t) {
   const to = new Date().toISOString().slice(0,10);
   const from = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
-  const r = await fetch(`https://finnhub.io/api/v1/stock/insider-transactions?symbol=${t}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+  const r = await fhFetch(`https://finnhub.io/api/v1/stock/insider-transactions?symbol=${t}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
   return r.ok?r.json():{data:[]};
 }
 async function fhNews(t) {
   const to = new Date().toISOString().slice(0,10);
   const from = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
-  const r = await fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+  const r = await fhFetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
   return r.ok?r.json():[];
 }
 async function fmpEarningsCalendar(t) {
-  const r = await fetch(`https://financialmodelingprep.com/api/v3/historical/earning_calendar/${t}?apikey=${FMP_KEY}`);
-  if (!r.ok) return null;
-  const data = await r.json();
-  if (!Array.isArray(data) || !data.length) return null;
-  const today = new Date().toISOString().slice(0,10);
-  const upcoming = data.filter(e => e.date && e.date >= today).sort((a,b) => a.date.localeCompare(b.date));
-  if (!upcoming.length) return null;
-  const next = upcoming[0];
-  return {
-    date: next.date,
-    hour: next.time === 'bmo' ? 'bmo' : (next.time === 'amc' ? 'amc' : ''),
-    epsEstimate: next.epsEstimated,
-    revenueEstimate: next.revenueEstimated,
-    quarter: next.fiscalDateEnding ? Math.floor(new Date(next.fiscalDateEnding).getMonth() / 3) + 1 : null,
-    year: next.fiscalDateEnding ? new Date(next.fiscalDateEnding).getFullYear() : null
-  };
+  // historical/earning_calendar requires paid FMP tier — skip to avoid 403 noise.
+  return null;
 }
-async function fmpUpgrades(t) { const r = await fetch(`https://financialmodelingprep.com/api/v3/upgrades-downgrades/${t}?apikey=${FMP_KEY}`); return r.ok?r.json():[]; }
-async function fmpEstimates(t) { const r = await fetch(`https://financialmodelingprep.com/api/v3/analyst-estimates/${t}?limit=4&apikey=${FMP_KEY}`); return r.ok?r.json():[]; }
-
-// NEW: Historical daily candles for technicals — 200 days
-async function fmpHistorical(t) {
-  const to = new Date().toISOString().slice(0,10);
-  const from = new Date(Date.now() - 250*86400000).toISOString().slice(0,10);
-  const r = await fetch(`https://financialmodelingprep.com/api/v3/historical-price-full/${t}?from=${from}&to=${to}&apikey=${FMP_KEY}`);
-  if (!r.ok) return null;
-  const data = await r.json();
-  return data && data.historical ? data.historical : null;
-}
-
-// NEW: Historical earnings surprises
-async function fmpEarningsSurprises(t) {
-  const r = await fetch(`https://financialmodelingprep.com/api/v3/earnings-surprises/${t}?apikey=${FMP_KEY}`);
-  return r.ok ? r.json() : [];
-}
+// All FMP v3 signal endpoints below require paid tier — short-circuit on free key.
+async function fmpUpgrades(t) { return []; }
+async function fmpEstimates(t) { return []; }
+async function fmpHistorical(t) { return null; }
+async function fmpEarningsSurprises(t) { return []; }
 
 // NEW: Short interest + 52w + beta from Finnhub metrics endpoint
 async function fhShortInterest(t) {
-  const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${FINNHUB_KEY}`);
+  const r = await fhFetch(`https://finnhub.io/api/v1/stock/metric?symbol=${t}&metric=all&token=${FINNHUB_KEY}`);
   if (!r.ok) return null;
   const d = await r.json();
   if (!d.metric) return null;
@@ -1137,7 +1139,7 @@ function fmt(n, d=2) {
 }
 
 function classifyMacro(label, value, change) {
-  if (label === 'TNX') return change < -0.5 ? 'good' : change > 0.5 ? 'bad' : 'neutral';
+  if (label === 'TNX') return change > 0.5 ? 'good' : change < -0.5 ? 'bad' : 'neutral'; // proxied via TLT — moves inverse to yields
   if (label === 'DXY') return change < -0.3 ? 'good' : change > 0.3 ? 'bad' : 'neutral';
   if (label === 'VIX') { if (value < 18 && change < 0) return 'good'; if (value > 25 || change > 5) return 'bad'; return 'neutral'; }
   if (label === 'SOXX') return change > 0.5 ? 'good' : change < -0.5 ? 'bad' : 'neutral';
@@ -1155,7 +1157,7 @@ async function fetchMacro() {
       macroState[m.label] = { value: q.c, change: q.dp, regime };
       const card = document.getElementById('macro-' + m.label);
       card.className = 'card regime-' + regime;
-      document.getElementById('val-' + m.label).textContent = m.label === 'TNX' ? fmt(q.c) + '%' : (m.label === 'BTC' ? '$' + fmt(q.c, 0) : fmt(q.c));
+      document.getElementById('val-' + m.label).textContent = '$' + fmt(q.c);
       const chgEl = document.getElementById('chg-' + m.label);
       chgEl.textContent = (q.dp >= 0 ? '+' : '') + fmt(q.dp) + '%';
       chgEl.className = 'card-change ' + (q.dp >= 0 ? 'pos' : 'neg');
@@ -1790,7 +1792,7 @@ function closeModal() { document.getElementById('modalOverlay').classList.remove
 // Daily:        news, earnings calendar — cached
 
 const SIGNALS_CACHE_MS = 60 * 60 * 1000; // 1 hour
-const LIVE_REFRESH_MS = 15000; // 15 seconds for prices
+const LIVE_REFRESH_MS = 60000; // 60s — serial pacing for 28 quotes ≈ 30s; leave headroom
 const signalsCache = {};
 
 function loadSignalsCache() {
@@ -1825,28 +1827,30 @@ async function fetchSignalsForTicker(t) {
   return { recs, target, insider, upgrades, estimates, historical, surprisesRaw, metrics };
 }
 
+let signalsInFlight = false;
 async function fetchAllSignals() {
+  if (signalsInFlight) return;
+  signalsInFlight = true;
   setStatus('live', 'Loading signals…');
-  // Run all 21 tickers in parallel — Finnhub allows 60/sec
-  const results = await Promise.all(TICKERS.map(async t => {
-    try {
-      return { t, data: await fetchSignalsForTicker(t) };
-    } catch (e) {
-      return { t, data: null };
-    }
-  }));
-  results.forEach(({ t, data }) => {
-    if (data) signalsCache[t] = data;
-  });
-  saveSignalsCache();
+  try {
+    // fhFetch paces calls to ~54/min — these are queued, not actually parallel.
+    const results = await Promise.all(TICKERS.map(async t => {
+      try { return { t, data: await fetchSignalsForTicker(t) }; }
+      catch (e) { return { t, data: null }; }
+    }));
+    results.forEach(({ t, data }) => { if (data) signalsCache[t] = data; });
+    saveSignalsCache();
+  } finally { signalsInFlight = false; }
 }
 
-// Live quote fetch — runs every 15s
+let quotesInFlight = false;
 async function fetchAllQuotes(manual=false) {
+  if (quotesInFlight && !manual) return;
+  quotesInFlight = true;
   setStatus('live', manual ? 'Refreshing…' : 'Updating…');
   try {
     await fetchMacro();
-    // All quotes in parallel
+    // fhFetch paces calls — Promise.all just queues them into the pacing chain.
     const quotes = await Promise.all(TICKERS.map(t => fhQuote(t).catch(() => null)));
 
     TICKERS.forEach((t, i) => {
@@ -1883,6 +1887,7 @@ async function fetchAllQuotes(manual=false) {
     document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
     setStatus('live', 'Live');
   } catch (e) { console.error(e); setStatus('err', 'Error: ' + e.message); }
+  finally { quotesInFlight = false; }
 }
 
 // Compatibility alias for the Refresh button
