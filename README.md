@@ -7,6 +7,8 @@ Kestrel answers two questions:
 - What should I do with the investments I already own?
 - Which strong opportunities am I currently missing?
 
+The planned intelligence, verification, charting, and international-market work is tracked in [ROADMAP.md](ROADMAP.md).
+
 ## Run locally
 
 ```sh
