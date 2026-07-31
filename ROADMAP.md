@@ -8,7 +8,17 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 - Plain-English actions: Hold, Sell, Buy, and Ultra Buy.
 - Confidence shown separately from the action.
 - Progressive market-data loading and a local cache.
-- Ultra Buy locked until independent official-source checks are available.
+- Ultra Buy requires independent official-source agreement and a portfolio concentration check.
+
+## Delivery status
+
+- ✅ SEC filing verification, source links, conflict checks, and confidence gates.
+- ✅ Interactive `1D`, `1W`, `1M`, `1Y`, `5Y`, and `All` price graph.
+- ✅ Sector-aware valuation with conservative, reasonable, and optimistic ranges.
+- ✅ Daily thesis, earnings-surprise history, and analyst-estimate baselines.
+- ✅ Opportunity-versus-holding comparisons, concentration checks, and a simple stress test.
+- ✅ Point-in-time signal journal, model versions, and the first 30-day calibration method.
+- 🚧 Benchmark-relative outcomes, correlation, tax settings, and international local-market sources remain in progress.
 
 ## 1. Trust and verification
 
@@ -59,6 +69,7 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 
 ## 6. International expansion
 
+- Current international names are US-listed shares or ADRs and use SEC filings; this is not yet the same as direct local-market coverage.
 - Add one market at a time, starting with markets that provide dependable official digital filings.
 - Normalize currencies, reporting periods, accounting standards, share classes, and local market conventions.
 - Add country, governance, political, liquidity, and currency risks without burying the main decision.

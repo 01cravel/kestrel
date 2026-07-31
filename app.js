@@ -51,6 +51,10 @@ const VALUATION_BANDS = {
   default: { cheap: 15, fair: 25 },
 };
 
+const BOOK_VALUE_MODELS = new Set(['AXP']);
+const EARLY_STAGE_MODELS = new Set(['NBIS', 'RKLB', 'QBTS', 'ONDS']);
+const NORMALIZED_EARNINGS_MODELS = new Set(['MU', 'CAT', 'STX', 'CEG', 'COHR']);
+
 const state = {
   dashboard: null,
   positions: loadPositions(),
@@ -58,6 +62,9 @@ const state = {
   opportunities: [],
   pollTimer: null,
   savedSnapshotFor: null,
+  savedSignalsFor: null,
+  historyRangeBySymbol: {},
+  historyRequest: null,
 };
 
 const els = {
@@ -79,6 +86,11 @@ const els = {
   holdingsList: document.getElementById('holdingsList'),
   opportunitiesList: document.getElementById('opportunitiesList'),
   portfolioValue: document.getElementById('portfolioValue'),
+  portfolioRiskSection: document.getElementById('portfolioRiskSection'),
+  portfolioRiskSummary: document.getElementById('portfolioRiskSummary'),
+  portfolioRiskGrid: document.getElementById('portfolioRiskGrid'),
+  calibrationSummary: document.getElementById('calibrationSummary'),
+  calibrationGrid: document.getElementById('calibrationGrid'),
   detailDialog: document.getElementById('detailDialog'),
   detailContent: document.getElementById('detailContent'),
   holdingsDialog: document.getElementById('holdingsDialog'),
@@ -192,8 +204,192 @@ function analystView(recommendations) {
   return { ...latest, change, period: current.period || null };
 }
 
+function earningsView(history) {
+  if (!Array.isArray(history) || !history.length) return null;
+  const surprises = history
+    .map(item => ({
+      period: item.period || null,
+      actual: number(item.actual),
+      estimate: number(item.estimate),
+      surprisePercent: number(item.surprisePercent),
+    }))
+    .filter(item => item.surprisePercent !== null)
+    .slice(0, 8);
+  if (!surprises.length) return null;
+  const recent = surprises.slice(0, 4);
+  const averageSurprise = average(recent.map(item => clamp(item.surprisePercent, -30, 30)));
+  const beats = recent.filter(item => item.surprisePercent > 0).length;
+  return {
+    recent,
+    averageSurprise,
+    beats,
+    total: recent.length,
+    score: clamp(50 + averageSurprise * 1.6),
+  };
+}
+
+function estimateView(intelligence, currentPrice) {
+  if (!intelligence || intelligence.status === 'error') return null;
+  const estimate = intelligence.estimate || null;
+  const revision = intelligence.estimateRevision || null;
+  const target = intelligence.priceTarget || null;
+  const consensusTarget = number(target?.consensus) ?? number(target?.median);
+  const targetUpside = consensusTarget && currentPrice
+    ? ((consensusTarget - currentPrice) / currentPrice) * 100
+    : null;
+  const targetScore = targetUpside === null
+    ? null
+    : targetUpside >= 25 ? 90
+      : targetUpside >= 12 ? 78
+        : targetUpside >= 3 ? 64
+          : targetUpside >= -8 ? 48
+            : 25;
+  const targetLow = number(target?.low);
+  const targetHigh = number(target?.high);
+  const targetMedian = number(target?.median) ?? consensusTarget;
+  const disagreement = targetLow && targetHigh && targetMedian
+    ? ((targetHigh - targetLow) / targetMedian) * 100
+    : null;
+  const revisionDirection = revision?.direction || null;
+  const revisionAdjustment = revisionDirection === 'up' ? 8 : revisionDirection === 'down' ? -10 : 0;
+  return {
+    estimate,
+    revision,
+    target,
+    targetUpside,
+    disagreement,
+    score: targetScore === null ? null : clamp(targetScore + revisionAdjustment),
+    source: intelligence.source,
+  };
+}
+
+function multipleScore(value, bands) {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (value <= bands.cheap * 0.8) return 95;
+  if (value <= bands.cheap) return 86;
+  if (value <= (bands.cheap + bands.fair) / 2) return 72;
+  if (value <= bands.fair) return 55;
+  if (value <= bands.fair * 1.25) return 35;
+  return 15;
+}
+
+function priceToFairScore(price, fairValue) {
+  if (!Number.isFinite(price) || !Number.isFinite(fairValue) || fairValue <= 0) return null;
+  const ratio = price / fairValue;
+  if (ratio <= 0.72) return 96;
+  if (ratio <= 0.86) return 86;
+  if (ratio <= 1) return 72;
+  if (ratio <= 1.15) return 52;
+  if (ratio <= 1.35) return 30;
+  return 12;
+}
+
+function fairValueRange(low, base, high) {
+  const values = [low, base, high].map(number).filter(value => value > 0).sort((a, b) => a - b);
+  if (values.length !== 3) return null;
+  return { low: values[0], base: values[1], high: values[2] };
+}
+
+function valuationView(symbol, instrument, metrics, currentPrice, revenueGrowth, earningsGrowth, roe) {
+  const bands = VALUATION_BANDS[instrument.sector] || VALUATION_BANDS.default;
+  const forwardPe = number(metrics.forwardPE);
+  const priceToCashFlow = number(metrics.pfcfShareTTM);
+  const evToEbitda = number(metrics.evEbitdaTTM);
+  const evToRevenue = number(metrics.evRevenueTTM);
+  const bookValue = number(metrics.bookValuePerShareQuarterly) ?? number(metrics.bookValuePerShareAnnual);
+  const eps = NORMALIZED_EARNINGS_MODELS.has(symbol)
+    ? number(metrics.epsNormalizedAnnual) ?? number(metrics.epsBasicExclExtraItemsTTM) ?? number(metrics.epsTTM)
+    : number(metrics.epsBasicExclExtraItemsTTM) ?? number(metrics.epsTTM) ?? number(metrics.epsNormalizedAnnual);
+
+  if (BOOK_VALUE_MODELS.has(symbol) && bookValue > 0 && roe > 0) {
+    const currentPriceToBook = currentPrice / bookValue;
+    const reasonablePriceToBook = clamp(0.8 + roe / 10, 1.1, 4.5);
+    const range = fairValueRange(
+      bookValue * reasonablePriceToBook * 0.75,
+      bookValue * reasonablePriceToBook,
+      bookValue * reasonablePriceToBook * 1.25,
+    );
+    return {
+      score: average([
+        priceToFairScore(currentPrice, range?.base),
+        multipleScore(forwardPe, VALUATION_BANDS['Financial services']),
+      ]),
+      method: 'Book value and return on equity',
+      explanation: 'For a lending-led financial company, shareholder capital and the profit earned from it matter more than a generic market P/E.',
+      fairValue: range,
+      primaryMetric: { label: 'Price to book', value: currentPriceToBook, suffix: '×' },
+      confidence: 'Medium',
+    };
+  }
+
+  if (EARLY_STAGE_MODELS.has(symbol) && evToRevenue > 0 && currentPrice > 0) {
+    const sensibleGrowth = clamp(number(revenueGrowth) || 0, 0, 50);
+    const reasonableMultiple = clamp(2 + sensibleGrowth / 8, 2, 9);
+    const range = fairValueRange(
+      currentPrice * (reasonableMultiple * 0.62 / evToRevenue),
+      currentPrice * (reasonableMultiple / evToRevenue),
+      currentPrice * (reasonableMultiple * 1.35 / evToRevenue),
+    );
+    return {
+      score: priceToFairScore(currentPrice, range?.base),
+      method: 'Revenue multiple for an early-stage business',
+      explanation: 'Reliable earnings do not exist yet, so Kestrel uses sales growth and the enterprise value paid for each dollar of sales. This is less dependable than an earnings valuation.',
+      fairValue: range,
+      primaryMetric: { label: 'Enterprise value to sales', value: evToRevenue, suffix: '×' },
+      confidence: 'Low',
+    };
+  }
+
+  if (eps > 0 && currentPrice > 0) {
+    const rawGrowth = average([revenueGrowth, earningsGrowth]);
+    const sensibleGrowth = clamp(number(rawGrowth) || 8, -10, 30);
+    const growthAdjustment = clamp(1 + (sensibleGrowth - 8) / 100, 0.82, 1.22);
+    const baseMultiple = ((bands.cheap + bands.fair) / 2) * growthAdjustment;
+    const range = fairValueRange(
+      eps * bands.cheap * 0.9,
+      eps * baseMultiple,
+      eps * bands.fair * growthAdjustment,
+    );
+    const cashFlowBands = { cheap: 18, fair: instrument.sector === 'Software' ? 35 : 30 };
+    return {
+      score: average([
+        priceToFairScore(currentPrice, range?.base),
+        multipleScore(forwardPe, bands),
+        multipleScore(priceToCashFlow, cashFlowBands),
+        multipleScore(evToEbitda, { cheap: 12, fair: 24 }),
+      ]),
+      method: NORMALIZED_EARNINGS_MODELS.has(symbol) ? 'Normalized earnings through a full business cycle' : 'Earnings and cash flow',
+      explanation: NORMALIZED_EARNINGS_MODELS.has(symbol)
+        ? 'Profits can swing sharply in this industry, so Kestrel uses normalized earnings and avoids treating a peak year as permanent.'
+        : 'Kestrel values the company on sustainable earnings, then checks the result against forward earnings, cash flow, and operating profit where available.',
+      fairValue: range,
+      primaryMetric: { label: 'Forward P/E', value: forwardPe, suffix: '×' },
+      confidence: Number.isFinite(forwardPe) && Number.isFinite(priceToCashFlow) ? 'Medium' : 'Low',
+    };
+  }
+
+  return {
+    score: average([
+      multipleScore(forwardPe, bands),
+      multipleScore(priceToCashFlow, { cheap: 18, fair: 30 }),
+      multipleScore(evToEbitda, { cheap: 12, fair: 24 }),
+      multipleScore(evToRevenue, { cheap: 3, fair: 8 }),
+    ]),
+    method: 'Comparable market multiples',
+    explanation: 'There is not enough stable per-share earnings evidence for a dependable fair-value range, so Kestrel only compares several market multiples.',
+    fairValue: null,
+    primaryMetric: { label: 'Forward P/E', value: forwardPe, suffix: '×' },
+    confidence: 'Low',
+  };
+}
+
 function assess(symbol, rawData, position = null) {
-  const instrument = INSTRUMENTS[symbol] || { name: symbol, sector: 'default', country: 'US' };
+  const instrument = {
+    listingMarket: 'US',
+    currency: 'USD',
+    benchmark: 'SPY',
+    ...(INSTRUMENTS[symbol] || { name: symbol, sector: 'default', country: 'US' }),
+  };
   const quote = rawData?.quote || null;
   const metrics = rawData?.metrics || {};
   const analysts = analystView(rawData?.recommendations);
@@ -233,6 +429,8 @@ function assess(symbol, rawData, position = null) {
   const yearlyPosition = weekHigh && weekLow && weekHigh > weekLow
     ? ((currentPrice - weekLow) / (weekHigh - weekLow)) * 100
     : null;
+  const earningsEvidence = earningsView(rawData?.earnings);
+  const estimateEvidence = estimateView(rawData?.analystIntelligence, currentPrice);
 
   const qualityParts = [
     metricScore(roe, [[30, 100], [20, 85], [15, 72], [8, 55], [0, 35], [-Infinity, 10]]),
@@ -244,20 +442,28 @@ function assess(symbol, rawData, position = null) {
   }
   const quality = average(qualityParts);
 
-  const bands = VALUATION_BANDS[instrument.sector] || VALUATION_BANDS.default;
-  let valuation = null;
-  if (Number.isFinite(pe) && pe > 0) {
-    valuation = pe <= bands.cheap ? 92 : pe <= bands.fair ? 72 : pe <= bands.fair * 1.25 ? 47 : 22;
-    if (Number.isFinite(peg) && peg > 0) {
-      valuation = clamp(valuation + (peg <= 1 ? 10 : peg <= 1.8 ? 3 : peg > 3 ? -10 : 0));
-    }
+  const valuationEvidence = valuationView(symbol, instrument, metrics, currentPrice, revenueGrowth, earningsGrowth, roe);
+  let valuation = valuationEvidence.score;
+  if (Number.isFinite(valuation) && Number.isFinite(peg) && peg > 0) {
+    valuation = clamp(valuation + (peg <= 1 ? 7 : peg <= 1.8 ? 2 : peg > 3 ? -7 : 0));
   }
 
   const revenueScore = metricScore(revenueGrowth, [[20, 100], [10, 82], [5, 68], [0, 52], [-10, 30], [-Infinity, 10]]);
   const earningsScore = metricScore(earningsGrowth, [[25, 100], [10, 82], [3, 65], [0, 52], [-15, 28], [-Infinity, 8]]);
-  const direction = average([revenueScore, earningsScore, analysts ? clamp(analysts.score + analysts.change) : null]);
+  const analystScore = average([
+    analysts?.score ?? null,
+    estimateEvidence?.score ?? null,
+    earningsEvidence?.score ?? null,
+  ]);
+  const revisionAdjustment = estimateEvidence?.revision?.direction === 'up'
+    ? 7
+    : estimateEvidence?.revision?.direction === 'down' ? -9 : 0;
+  const direction = average([
+    revenueScore,
+    earningsScore,
+    analystScore === null ? null : clamp(analystScore + (analysts?.change || 0) + revisionAdjustment),
+  ]);
 
-  const analystScore = analysts?.score ?? null;
   const momentum = average([
     metricScore(yearReturn, [[30, 92], [15, 80], [5, 68], [0, 58], [-15, 40], [-Infinity, 20]]),
     metricScore(yearlyPosition, [[80, 82], [55, 72], [35, 58], [15, 40], [-Infinity, 25]]),
@@ -277,7 +483,15 @@ function assess(symbol, rawData, position = null) {
 
   const evidenceCount = [pe, roe, margin, revenueGrowth, earningsGrowth, analysts, weekHigh]
     .filter(value => value !== null && value !== undefined).length;
-  const confidence = evidenceCount >= 5 && analysts?.total >= 5 ? 'Medium' : 'Low';
+  const secEvidence = rawData?.sec || null;
+  const filingAgrees = secEvidence?.ratingReady === true;
+  const filingConflict = (number(secEvidence?.conflictCount) || 0) > 0;
+  let confidence = filingConflict
+    ? 'Low'
+    : evidenceCount >= 5 && analysts?.total >= 5
+      ? (filingAgrees ? 'High' : 'Medium')
+      : 'Low';
+  if (confidence === 'High' && estimateEvidence?.disagreement > 60) confidence = 'Medium';
 
   const positives = [];
   const risks = [];
@@ -295,6 +509,16 @@ function assess(symbol, rawData, position = null) {
   if (analysts?.positiveShare >= 70) positives.push('Most covering analysts remain positive.');
   if (analysts?.change >= 5) positives.push('The analyst view has improved recently.');
   if (analysts?.change <= -5) risks.push('The analyst view has weakened recently.');
+  if (estimateEvidence?.revision?.direction === 'up') positives.push('Analysts have raised their earnings or sales expectations since the previous snapshot.');
+  if (estimateEvidence?.revision?.direction === 'down') risks.push('Analysts have cut their earnings or sales expectations since the previous snapshot.');
+  if (earningsEvidence?.total >= 3 && earningsEvidence.beats >= 3) positives.push(`The company beat earnings expectations in ${earningsEvidence.beats} of the last ${earningsEvidence.total} reports.`);
+  if (earningsEvidence?.total >= 3 && earningsEvidence.beats <= 1) risks.push('Recent earnings have repeatedly missed analyst expectations.');
+  if (estimateEvidence?.targetUpside >= 15) positives.push('The analyst consensus target remains meaningfully above today’s price.');
+  if (estimateEvidence?.targetUpside < -8) risks.push('The analyst consensus target is below today’s price.');
+  if (estimateEvidence?.disagreement > 60) risks.push('Analysts disagree widely about what the shares are worth.');
+
+  if (filingAgrees) positives.push('The latest official filing broadly agrees with the market-data figures.');
+  if (filingConflict) risks.push('The official filing and market-data figures need reconciling before adding.');
 
   if (debtToEquity > 1.5) risks.push('Debt is high compared with shareholder capital.');
   if (beta > 1.8) risks.push('The share price has been much more volatile than the wider market.');
@@ -302,17 +526,18 @@ function assess(symbol, rawData, position = null) {
 
   const severeDeterioration = revenueGrowth < -12 && earningsGrowth < -18;
   const weakAgreement = quality < 38 && direction < 38 && (analystScore === null || analystScore < 45);
-  const ultraCandidate = confidence === 'Medium'
-    && score >= 82
+  const ultraCandidate = confidence === 'High'
+    && score >= 86
     && quality >= 78
     && valuation >= 70
     && direction >= 72
     && analystScore >= 70
-    && risks.length <= 1;
+    && risks.length === 0;
 
   let action = 'Hold';
   if ((severeDeterioration || weakAgreement) && score < 43) action = 'Sell';
   else if (confidence === 'Medium' && score >= 68 && valuation >= 48 && direction >= 58) action = 'Buy';
+  else if (confidence === 'High' && score >= 68 && valuation >= 48 && direction >= 58) action = ultraCandidate ? 'Ultra Buy' : 'Buy';
 
   let reason = buildReason(action, { quality, valuation, direction, analysts, positives, risks });
 
@@ -331,6 +556,12 @@ function assess(symbol, rawData, position = null) {
     metrics: {
       pe,
       peg,
+      forwardPe: number(metrics.forwardPE),
+      priceToCashFlow: number(metrics.pfcfShareTTM),
+      priceToBook: currentPrice && number(metrics.bookValuePerShareQuarterly)
+        ? currentPrice / number(metrics.bookValuePerShareQuarterly)
+        : null,
+      evToEbitda: number(metrics.evEbitdaTTM),
       roe,
       margin,
       revenueGrowth,
@@ -344,8 +575,16 @@ function assess(symbol, rawData, position = null) {
       analystCount: analysts?.total ?? null,
       analystPositive: analysts?.positiveShare ?? null,
       analystChange: analysts?.change ?? null,
+      analystTarget: number(estimateEvidence?.target?.consensus) ?? number(estimateEvidence?.target?.median),
+      analystTargetUpside: estimateEvidence?.targetUpside ?? null,
+      analystDisagreement: estimateEvidence?.disagreement ?? null,
+      earningsBeatRate: earningsEvidence?.total ? earningsEvidence.beats / earningsEvidence.total * 100 : null,
+      earningsAverageSurprise: earningsEvidence?.averageSurprise ?? null,
     },
     componentScores: { quality, valuation, direction, analyst: analystScore, momentum },
+    valuation: valuationEvidence,
+    analystEvidence: estimateEvidence,
+    earningsEvidence,
   };
 }
 
@@ -389,7 +628,8 @@ function buildReason(action, evidence) {
   if (action === 'Sell') {
     return 'The company is weakening in more than one important area. Keeping it now needs a fresh investment case.';
   }
-  if (action === 'Buy') {
+  if (action === 'Buy' || action === 'Ultra Buy') {
+    if (action === 'Ultra Buy') return 'Several independent signals agree: business quality, valuation, direction, analysts, and the latest official filing.';
     if (quality >= 75 && valuation >= 70) return 'The business looks strong, growth is holding up, and today’s price appears sensible.';
     if (analysts?.positiveShare >= 75) return 'Company progress and analyst evidence are positive, while the price remains acceptable.';
     return positives.slice(0, 2).join(' ') || 'Several independent parts of the evidence support adding carefully.';
@@ -418,13 +658,83 @@ function applyPortfolioRisk(assessments) {
     assessment.positionValue = value;
     assessment.portfolioWeight = weight;
 
-    if (weight >= 15 && assessment.action === 'Buy') {
+    if (weight >= 15 && (assessment.action === 'Buy' || assessment.action === 'Ultra Buy')) {
       assessment.action = 'Hold';
       assessment.reason = 'The company looks attractive, but this position is already large enough in your portfolio.';
       assessment.risks.unshift('Adding more would increase concentration risk.');
     }
   });
   return total;
+}
+
+function buildPortfolioRisk(assessments, total) {
+  if (!total) return null;
+  const items = Object.values(assessments).filter(item => item.positionValue > 0);
+  const singleStocks = items.filter(item => item.instrument.type !== 'fund');
+  const largestStock = [...singleStocks].sort((a, b) => b.portfolioWeight - a.portfolioWeight)[0] || null;
+  const sectorValues = {};
+  const countryValues = {};
+  let marketFallLoss = 0;
+  items.forEach(item => {
+    sectorValues[item.instrument.sector] = (sectorValues[item.instrument.sector] || 0) + item.positionValue;
+    countryValues[item.instrument.country] = (countryValues[item.instrument.country] || 0) + item.positionValue;
+    const beta = number(item.metrics?.beta);
+    const assumedFall = item.symbol === 'GLD'
+      ? 5
+      : item.instrument.type === 'fund' ? 20 : clamp((beta || 1) * 20, 10, 40);
+    marketFallLoss += item.positionValue * assumedFall / 100;
+  });
+  const rankedSectors = Object.entries(sectorValues)
+    .map(([name, value]) => ({ name, value, weight: value / total * 100 }))
+    .sort((a, b) => b.value - a.value);
+  const rankedCountries = Object.entries(countryValues)
+    .map(([name, value]) => ({ name, value, weight: value / total * 100 }))
+    .sort((a, b) => b.value - a.value);
+  const largestSector = rankedSectors.find(item => item.name !== 'Broad market') || rankedSectors[0] || null;
+  const largestCountry = rankedCountries[0] || null;
+  const stressLossPercent = marketFallLoss / total * 100;
+  const watch = (largestStock?.portfolioWeight || 0) > 20 || (largestSector?.weight || 0) > 45;
+  return {
+    status: watch ? 'Concentrated' : 'Reasonably spread',
+    largestStock,
+    largestSector,
+    largestCountry,
+    stressLossPercent,
+    sectorWeights: rankedSectors,
+  };
+}
+
+function compareOpportunity(opportunity, assessments, portfolioRisk) {
+  const owned = Object.values(assessments).filter(item => item.positionValue > 0 && item.instrument.type !== 'fund');
+  const weakest = [...owned].sort((a, b) => {
+    const actionOrder = { Sell: 0, Hold: 1, Buy: 2, 'Ultra Buy': 3 };
+    return (actionOrder[a.action] - actionOrder[b.action]) || ((a.score ?? 50) - (b.score ?? 50));
+  })[0] || null;
+  const sectorWeight = portfolioRisk?.sectorWeights.find(item => item.name === opportunity.instrument.sector)?.weight || 0;
+  const scoreAdvantage = weakest && Number.isFinite(opportunity.score) && Number.isFinite(weakest.score)
+    ? opportunity.score - weakest.score
+    : null;
+  if (weakest && scoreAdvantage >= 8) {
+    return {
+      type: 'replacement',
+      title: `Compare with ${weakest.instrument.name}`,
+      detail: `${opportunity.instrument.name} currently has a stronger evidence score, but taxes, costs, and your original thesis still matter before replacing anything.`,
+      symbol: weakest.symbol,
+      scoreAdvantage,
+    };
+  }
+  if (sectorWeight < 8) {
+    return {
+      type: 'diversification',
+      title: `Adds ${opportunity.instrument.sector.toLowerCase()} exposure`,
+      detail: 'This idea adds a business area that is currently small or absent in your portfolio.',
+    };
+  }
+  return {
+    type: 'watch',
+    title: 'A new idea, not an automatic replacement',
+    detail: 'Its evidence is attractive, but it does not clearly improve the current portfolio enough to force a trade.',
+  };
 }
 
 async function fetchDashboard() {
@@ -459,19 +769,88 @@ function calculateAndRender() {
   });
   state.assessments = assessments;
   const portfolioTotal = applyPortfolioRisk(assessments);
+  const portfolioRisk = buildPortfolioRisk(assessments, portfolioTotal);
 
-  state.opportunities = dashboard.opportunityUniverse
+  const candidateAssessments = dashboard.opportunityUniverse
     .filter(symbol => !state.positions[symbol]?.shares)
-    .map(symbol => assess(symbol, dashboard.data[symbol], null))
+    .map(symbol => assess(symbol, dashboard.data[symbol], null));
+  state.opportunities = candidateAssessments
     .filter(item => item.action === 'Buy' && item.confidence !== 'Low')
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    .slice(0, 5)
+    .map(item => ({ ...item, comparison: compareOpportunity(item, assessments, portfolioRisk) }));
 
   renderBrief(dashboard, ownedSymbols, assessments);
   renderHoldings(symbolsToShow, assessments, ownedSymbols.length > 0);
   renderPortfolioValue(portfolioTotal, ownedSymbols);
+  renderPortfolioRisk(portfolioRisk, ownedSymbols);
   renderOpportunities(dashboard);
   renderChanges(dashboard);
+  recordDailySignals(dashboard, [...Object.values(assessments), ...candidateAssessments]);
+}
+
+async function recordDailySignals(dashboard, assessments) {
+  if (dashboard.status !== 'ready' || !dashboard.lastFullRefresh) return;
+  const snapshotKey = String(dashboard.lastFullRefresh);
+  if (state.savedSignalsFor === snapshotKey) return;
+  state.savedSignalsFor = snapshotKey;
+  const signals = assessments
+    .filter(item => item.action !== 'Checking' && Number.isFinite(item.metrics?.currentPrice))
+    .map(item => ({
+      symbol: item.symbol,
+      action: item.action,
+      confidence: item.confidence,
+      score: item.score,
+      price: item.metrics.currentPrice,
+      owned: Boolean(state.positions[item.symbol]?.shares),
+      reason: item.reason,
+    }));
+  try {
+    const response = await fetch('/api/signals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signals, evidenceTimestamp: dashboard.lastFullRefresh }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Signal journal rejected the snapshot');
+    renderCalibration(payload.calibration);
+  } catch (error) {
+    state.savedSignalsFor = null;
+    els.calibrationSummary.textContent = 'The signal journal is temporarily unavailable.';
+    els.calibrationGrid.innerHTML = `<div class="empty-card wide"><strong>Track record not saved</strong><span>${escapeHtml(error.message)}</span></div>`;
+  }
+}
+
+function renderCalibration(calibration) {
+  if (!calibration) return;
+  const hasOutcomes = calibration.maturedSignals > 0;
+  els.calibrationSummary.textContent = hasOutcomes
+    ? `${calibration.maturedSignals} calls have reached their first review date.`
+    : 'Signals are stored exactly as they appeared; outcomes need time.';
+  const reviewDate = calibration.firstReviewDate
+    ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${calibration.firstReviewDate}T00:00:00Z`))
+    : 'After the first actionable call';
+  els.calibrationGrid.innerHTML = `
+    <article>
+      <span>Evidence days stored</span>
+      <strong>${escapeHtml(calibration.recordedDays)}</strong>
+      <p>${escapeHtml(calibration.signalsRecorded)} point-in-time assessments saved locally.</p>
+    </article>
+    <article>
+      <span>30-day hit rate</span>
+      <strong>${hasOutcomes && calibration.hitRate !== null ? plainPercent(calibration.hitRate) : 'Not ready'}</strong>
+      <p>${hasOutcomes ? 'Directional Buy and Sell calls only.' : `First review: ${escapeHtml(reviewDate)}.`}</p>
+    </article>
+    <article>
+      <span>High-confidence check</span>
+      <strong>${calibration.highConfidenceHitRate !== null ? plainPercent(calibration.highConfidenceHitRate) : 'Not ready'}</strong>
+      <p>High confidence must prove more dependable than Medium confidence.</p>
+    </article>
+    <article>
+      <span>Model version</span>
+      <strong>${escapeHtml(calibration.modelVersion)}</strong>
+      <p>${escapeHtml(calibration.method)}.</p>
+    </article>`;
 }
 
 function updateDataStatus(dashboard) {
@@ -586,6 +965,40 @@ function renderPortfolioValue(total, ownedSymbols) {
   els.portfolioValue.textContent = `${compactMoney(total)} across ${ownedSymbols.length} holdings`;
 }
 
+function renderPortfolioRisk(risk, ownedSymbols) {
+  if (!ownedSymbols.length || !risk) {
+    els.portfolioRiskSection.hidden = true;
+    return;
+  }
+  els.portfolioRiskSection.hidden = false;
+  els.portfolioRiskSummary.textContent = risk.status === 'Concentrated'
+    ? 'One part of the portfolio deserves a closer look.'
+    : 'No major concentration warning is visible.';
+  const stockName = risk.largestStock?.instrument.name || 'No single company';
+  const stockWeight = risk.largestStock?.portfolioWeight || 0;
+  els.portfolioRiskGrid.innerHTML = `
+    <article>
+      <span>Largest single company</span>
+      <strong>${escapeHtml(stockName)}</strong>
+      <p>${risk.largestStock ? `${plainPercent(stockWeight)} of the portfolio${stockWeight > 20 ? ' · above the 20% caution line' : ''}` : 'Broad funds are excluded from this measure.'}</p>
+    </article>
+    <article>
+      <span>Largest business area</span>
+      <strong>${escapeHtml(risk.largestSector?.name || 'Not available')}</strong>
+      <p>${risk.largestSector ? `${plainPercent(risk.largestSector.weight)} of the portfolio` : 'Add holdings to calculate this exposure.'}</p>
+    </article>
+    <article>
+      <span>Largest company home</span>
+      <strong>${escapeHtml(risk.largestCountry?.name || 'Not available')}</strong>
+      <p>${risk.largestCountry ? `${plainPercent(risk.largestCountry.weight)} of the portfolio by company domicile` : 'Country exposure is not available.'}</p>
+    </article>
+    <article>
+      <span>Rough market-fall test</span>
+      <strong>About −${plainPercent(risk.stressLossPercent)}</strong>
+      <p>A simple estimate if broad markets fell 20%; this is not a worst-case forecast.</p>
+    </article>`;
+}
+
 function renderOpportunities(dashboard) {
   if (state.opportunities.length) {
     els.opportunitiesList.innerHTML = state.opportunities.map((item, index) => renderOpportunity(item, index)).join('');
@@ -613,7 +1026,7 @@ function renderOpportunities(dashboard) {
 }
 
 function renderOpportunity(item, index) {
-  const { symbol, instrument, reason, metrics, confidence } = item;
+  const { symbol, instrument, reason, metrics, confidence, comparison } = item;
   return `
     <article class="opportunity-card">
       <div>
@@ -621,7 +1034,8 @@ function renderOpportunity(item, index) {
         <span class="company-price">${money(metrics.currentPrice, 2)} · ${escapeHtml(instrument.country)}</span>
       </div>
       <span class="opportunity-rank">0${index + 1}</span>
-      <p>${escapeHtml(reason)}</p>
+      <p class="opportunity-reason">${escapeHtml(reason)}</p>
+      ${comparison ? `<p class="opportunity-comparison"><strong>${escapeHtml(comparison.title)}</strong>${escapeHtml(comparison.detail)}</p>` : ''}
       <div class="opportunity-bottom">
         <div>
           <span class="action-pill">Buy · not owned</span>
@@ -684,17 +1098,45 @@ function openDetail(symbol, isOpportunity = false) {
     : state.assessments[symbol];
   if (!item) return;
 
-  const { instrument, action, confidence, reason, positives, risks, metrics, componentScores, rawData } = item;
+  const { instrument, action, confidence, reason, positives, risks, metrics, componentScores, rawData, valuation, analystEvidence, earningsEvidence } = item;
   const positiveList = positives.length ? positives : ['No strong positive evidence is available yet.'];
   const riskList = risks.length ? risks : ['No major quantitative warning is visible in the available data.'];
   const fetched = rawData?.fetchedAt ? new Date(rawData.fetchedAt * 1000).toLocaleString() : 'Unknown';
 
   els.detailContent.innerHTML = `
-    <p class="eyebrow">${escapeHtml(instrument.country)} · ${escapeHtml(instrument.sector)}</p>
+    <p class="eyebrow">${escapeHtml(instrument.country)} company · ${escapeHtml(instrument.listingMarket)} listing · ${escapeHtml(instrument.sector)}</p>
     <h2>${escapeHtml(instrument.name)} <span class="ticker">${escapeHtml(symbol)}</span></h2>
     <div class="detail-hero" data-action="${escapeHtml(action)}">
       <strong>${escapeHtml(action)}</strong>
       <p>${escapeHtml(reason)}</p>
+    </div>
+    <div class="detail-section chart-section">
+      <div class="chart-heading">
+        <div><h3>Price history</h3><p id="chartSummary">Loading verified price history</p></div>
+        <div class="chart-ranges" role="group" aria-label="Price history range">
+          ${['1D', '1W', '1M', '1Y', '5Y', 'All'].map(range => `<button type="button" data-history-range="${range.toLowerCase()}">${range}</button>`).join('')}
+        </div>
+      </div>
+      <div class="history-chart" id="historyChart" aria-live="polite">
+        <div class="chart-loading"><span></span><strong>Loading price evidence</strong></div>
+      </div>
+      <p class="chart-source" id="chartSource"></p>
+    </div>
+    <div class="detail-section">
+      <h3>What looks like fair value</h3>
+      ${renderFairValue(valuation, metrics?.currentPrice)}
+    </div>
+    <div class="detail-section">
+      <h3>The investment thesis</h3>
+      ${renderThesis(item)}
+    </div>
+    ${item.comparison ? `<div class="detail-section">
+      <h3>How it could fit your portfolio</h3>
+      <div class="fit-card"><strong>${escapeHtml(item.comparison.title)}</strong><p>${escapeHtml(item.comparison.detail)}</p></div>
+    </div>` : ''}
+    <div class="detail-section">
+      <h3>What analysts are changing</h3>
+      ${renderAnalystEvidence(analystEvidence, earningsEvidence)}
     </div>
     <div class="detail-section">
       <h3>Why Kestrel reached this view</h3>
@@ -708,6 +1150,8 @@ function openDetail(symbol, isOpportunity = false) {
       <h3>The numbers underneath</h3>
       <div class="metric-grid">
         ${metricTile('Price versus earnings', metrics?.pe ? `${metrics.pe.toFixed(1)}×` : 'Not available')}
+        ${metricTile('Forward price versus earnings', metrics?.forwardPe ? `${metrics.forwardPe.toFixed(1)}×` : 'Not available')}
+        ${metricTile('Price versus cash flow', metrics?.priceToCashFlow ? `${metrics.priceToCashFlow.toFixed(1)}×` : 'Not available')}
         ${metricTile('Sales growth', percent(metrics?.revenueGrowth))}
         ${metricTile('Earnings growth', percent(metrics?.earningsGrowth))}
         ${metricTile('Return on equity', plainPercent(metrics?.roe))}
@@ -717,12 +1161,298 @@ function openDetail(symbol, isOpportunity = false) {
     </div>
     <div class="detail-section">
       <h3>Evidence status</h3>
-      <p class="plain-reason"><strong>${escapeHtml(confidence)} confidence.</strong> Market and analyst data came through Finnhub at ${escapeHtml(fetched)}. Official company filing checks are not connected yet, so Ultra Buy remains locked.</p>
-      ${item.ultraCandidate ? '<p class="plain-reason"><strong>Worth noting:</strong> This company clears the quantitative Ultra Buy bar, pending independent filing verification and portfolio checks.</p>' : ''}
+      ${renderEvidenceStatus(rawData?.sec, confidence, fetched)}
+      ${item.ultraCandidate && action !== 'Ultra Buy' ? '<p class="plain-reason"><strong>Worth noting:</strong> This company clears the quantitative Ultra Buy bar, but portfolio risk still prevents that rating.</p>' : ''}
       ${rawData?.errors?.length ? `<p class="plain-reason"><strong>Missing evidence:</strong> ${escapeHtml(rawData.errors.join(' · '))}</p>` : ''}
     </div>`;
 
   els.detailDialog.showModal();
+  setupHistoryChart(symbol);
+}
+
+function renderFairValue(valuation, currentPrice) {
+  if (!valuation) {
+    return '<div class="fair-value-empty"><strong>Not enough evidence</strong><span>Kestrel will not invent a precise value without a suitable model.</span></div>';
+  }
+  const range = valuation.fairValue;
+  const modelCopy = `<p class="valuation-method"><strong>${escapeHtml(valuation.method)}</strong><span>${escapeHtml(valuation.explanation)}</span></p>`;
+  if (!range) {
+    return `${modelCopy}<div class="fair-value-empty"><strong>No dependable range yet</strong><span>Market multiples are included in the score, but the available figures do not support a responsible per-share range.</span></div>`;
+  }
+  const difference = Number.isFinite(currentPrice) && range.base
+    ? ((currentPrice - range.base) / range.base) * 100
+    : null;
+  const comparison = difference === null
+    ? 'Today’s price could not be compared.'
+    : Math.abs(difference) < 4
+      ? 'Today’s price is close to the reasonable case.'
+      : `Today’s price is about ${Math.abs(difference).toFixed(0)}% ${difference > 0 ? 'above' : 'below'} the reasonable case.`;
+  return `${modelCopy}
+    <div class="fair-value-band">
+      <div><span>Conservative</span><strong>${money(range.low, 2)}</strong></div>
+      <div class="is-base"><span>Reasonable</span><strong>${money(range.base, 2)}</strong></div>
+      <div><span>Optimistic</span><strong>${money(range.high, 2)}</strong></div>
+    </div>
+    <p class="fair-value-note">${escapeHtml(comparison)} This is a valuation range, not a price prediction.</p>`;
+}
+
+function renderThesis(item) {
+  const { instrument, action, positives, risks, metrics, valuation, rawData } = item;
+  const sectorNeeds = {
+    Semiconductors: 'Demand, margins, and cash generation must remain healthy through the industry cycle.',
+    Software: 'Sales growth and profit margins must remain durable without excessive spending or dilution.',
+    'Financial services': 'Returns on shareholder capital must stay strong while credit and funding risks remain controlled.',
+    Healthcare: 'Earnings growth must persist and the product or treatment pipeline must continue delivering.',
+    Consumer: 'Demand, pricing power, and margins must hold up through weaker economic periods.',
+    Industrial: 'Order demand and cash generation must remain healthy across the economic cycle.',
+    Utilities: 'New investment must earn sensible returns without debt becoming uncomfortable.',
+    Energy: 'Cash generation must remain resilient at less favourable commodity prices.',
+  };
+  const status = action === 'Sell'
+    ? 'Thesis looks broken'
+    : risks.length >= 3 || rawData?.sec?.conflictCount
+      ? 'Needs watching'
+      : 'Thesis is on track';
+  const statusClass = action === 'Sell' ? 'is-broken' : status === 'Needs watching' ? 'is-watch' : 'is-on-track';
+  const changeConditions = [];
+  if (rawData?.sec?.conflictCount) changeConditions.push('Reconcile the disagreement between the official filing and market-data feed.');
+  changeConditions.push('Reassess if sales and earnings both start shrinking.');
+  changeConditions.push('Reassess if analyst estimates trend down across more than one snapshot.');
+  if (valuation?.fairValue?.high) changeConditions.push(`Do not add blindly if the price rises beyond the optimistic value of ${money(valuation.fairValue.high, 2)}.`);
+
+  return `<div class="thesis-card ${statusClass}">
+    <div class="thesis-status"><span>Current status</span><strong>${escapeHtml(status)}</strong></div>
+    <div class="thesis-columns">
+      <div><span>Why own it</span><p>${escapeHtml(positives.slice(0, 2).join(' ') || item.reason)}</p></div>
+      <div><span>What must stay true</span><p>${escapeHtml(instrument.type === 'fund' ? 'The fund must continue serving its diversification role at an appropriate portfolio weight.' : sectorNeeds[instrument.sector] || 'Business quality, growth, and financial strength must remain intact.')}</p></div>
+      <div><span>What would change the view</span><ul>${changeConditions.slice(0, 3).map(text => `<li>${escapeHtml(text)}</li>`).join('')}</ul></div>
+    </div>
+  </div>`;
+}
+
+function renderAnalystEvidence(analystEvidence, earningsEvidence) {
+  if (!analystEvidence && !earningsEvidence) {
+    return '<div class="fair-value-empty"><strong>No dependable analyst history</strong><span>Kestrel will not treat missing analyst data as positive evidence.</span></div>';
+  }
+  const target = analystEvidence?.target || {};
+  const estimate = analystEvidence?.estimate || null;
+  const revision = analystEvidence?.revision || null;
+  const revisionCopy = revision?.status === 'baseline'
+    ? 'Today establishes the estimate baseline. Changes will appear after later daily snapshots.'
+    : revision?.direction === 'up'
+      ? 'Earnings or sales expectations have moved up since the earlier snapshot.'
+      : revision?.direction === 'down'
+        ? 'Earnings or sales expectations have moved down since the earlier snapshot.'
+        : revision?.status === 'compared' ? 'Expectations are broadly unchanged.' : 'Estimate changes are not available yet.';
+  const beatCopy = earningsEvidence?.total
+    ? `${earningsEvidence.beats} of the last ${earningsEvidence.total} reported earnings figures beat expectations.`
+    : 'Recent earnings surprises are not available.';
+
+  return `<div class="analyst-evidence-grid">
+    <div>
+      <span>Consensus price range</span>
+      <strong>${number(target.low) ? money(number(target.low), 2) : '—'} – ${number(target.high) ? money(number(target.high), 2) : '—'}</strong>
+      <small>Central view ${number(target.consensus) || number(target.median) ? money(number(target.consensus) ?? number(target.median), 2) : 'not available'}</small>
+    </div>
+    <div>
+      <span>Next annual estimate</span>
+      <strong>${estimate?.epsAverage !== null && estimate?.epsAverage !== undefined ? `${money(number(estimate.epsAverage), 2)} EPS` : 'Not available'}</strong>
+      <small>${estimate ? `${estimate.epsAnalysts || 0} EPS analysts · year ending ${escapeHtml(estimate.fiscalDate || '—')}` : 'No estimate returned'}</small>
+    </div>
+    <div>
+      <span>Estimate direction</span>
+      <strong>${revision?.direction === 'up' ? 'Rising' : revision?.direction === 'down' ? 'Falling' : revision?.status === 'compared' ? 'Stable' : 'Baseline'}</strong>
+      <small>${escapeHtml(revisionCopy)}</small>
+    </div>
+    <div>
+      <span>Recent earnings</span>
+      <strong>${earningsEvidence?.averageSurprise !== null && earningsEvidence?.averageSurprise !== undefined ? percent(earningsEvidence.averageSurprise) : 'Not available'}</strong>
+      <small>${escapeHtml(beatCopy)}</small>
+    </div>
+  </div>
+  <p class="chart-source">${escapeHtml(analystEvidence?.source || 'Finnhub earnings history')}. Analyst targets are opinions, not verified company results.</p>`;
+}
+
+function setupHistoryChart(symbol) {
+  const selectedRange = state.historyRangeBySymbol[symbol] || '1y';
+  document.querySelectorAll('[data-history-range]').forEach(button => {
+    const isSelected = button.dataset.historyRange === selectedRange;
+    button.classList.toggle('is-active', isSelected);
+    button.setAttribute('aria-pressed', String(isSelected));
+    button.addEventListener('click', () => {
+      state.historyRangeBySymbol[symbol] = button.dataset.historyRange;
+      document.querySelectorAll('[data-history-range]').forEach(candidate => {
+        const active = candidate === button;
+        candidate.classList.toggle('is-active', active);
+        candidate.setAttribute('aria-pressed', String(active));
+      });
+      loadHistory(symbol, button.dataset.historyRange);
+    });
+  });
+  loadHistory(symbol, selectedRange);
+}
+
+async function loadHistory(symbol, range) {
+  state.historyRequest?.abort();
+  state.historyRequest = new AbortController();
+  const chart = document.getElementById('historyChart');
+  const summary = document.getElementById('chartSummary');
+  const source = document.getElementById('chartSource');
+  if (!chart || !summary || !source) return;
+  chart.innerHTML = '<div class="chart-loading"><span></span><strong>Loading price evidence</strong></div>';
+  summary.textContent = `Checking the ${range.toUpperCase()} record`;
+  source.textContent = '';
+  try {
+    const response = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}`, {
+      cache: 'no-store',
+      signal: state.historyRequest.signal,
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Price history is unavailable');
+    renderHistoryChart(payload, chart, summary, source);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    chart.innerHTML = `<div class="chart-error"><strong>Price history is unavailable</strong><span>${escapeHtml(error.message)}</span></div>`;
+    summary.textContent = 'The rating still uses current market and company evidence';
+  }
+}
+
+function renderHistoryChart(payload, chart, summary, source) {
+  const points = (payload.points || [])
+    .map(point => ({ ...point, close: number(point.close), timestamp: number(point.timestamp) }))
+    .filter(point => point.close !== null && point.timestamp !== null);
+  if (!points.length) throw new Error('No prices were returned for this period');
+
+  const width = 720;
+  const height = 250;
+  const inset = { top: 20, right: 16, bottom: 30, left: 16 };
+  const closes = points.map(point => point.close);
+  const minimum = Math.min(...closes);
+  const maximum = Math.max(...closes);
+  const spread = maximum - minimum || maximum * 0.02 || 1;
+  const low = minimum - spread * 0.08;
+  const high = maximum + spread * 0.08;
+  const x = index => inset.left + (index / Math.max(1, points.length - 1)) * (width - inset.left - inset.right);
+  const y = value => inset.top + ((high - value) / (high - low)) * (height - inset.top - inset.bottom);
+  const path = points.map((point, index) => `${index ? 'L' : 'M'} ${x(index).toFixed(2)} ${y(point.close).toFixed(2)}`).join(' ');
+  const area = `${path} L ${x(points.length - 1).toFixed(2)} ${height - inset.bottom} L ${x(0).toFixed(2)} ${height - inset.bottom} Z`;
+  const first = points[0];
+  const last = points.at(-1);
+  const periodReturn = number(payload.periodReturn) ?? ((last.close - first.close) / first.close * 100);
+  const directionClass = periodReturn >= 0 ? 'is-up' : 'is-down';
+  const directionText = `${periodReturn >= 0 ? '+' : ''}${periodReturn.toFixed(1)}%`;
+  const rangeLabel = String(payload.range || '').toUpperCase();
+  summary.innerHTML = `<strong class="${directionClass}">${directionText}</strong> over ${escapeHtml(rangeLabel)} · ${money(last.close, 2)} latest`;
+
+  chart.className = `history-chart ${directionClass}`;
+  chart.innerHTML = `
+    <div class="chart-stage">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(payload.symbol)} price changed ${escapeHtml(directionText)} over ${escapeHtml(rangeLabel)}">
+        <defs><linearGradient id="historyArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-opacity="0.2"/><stop offset="1" stop-opacity="0"/></linearGradient></defs>
+        <line class="chart-grid" x1="${inset.left}" x2="${width - inset.right}" y1="${y(maximum)}" y2="${y(maximum)}"/>
+        <line class="chart-grid" x1="${inset.left}" x2="${width - inset.right}" y1="${y(minimum)}" y2="${y(minimum)}"/>
+        <path class="chart-area" d="${area}"/>
+        <path class="chart-line" d="${path}"/>
+        <line class="chart-crosshair" x1="0" x2="0" y1="${inset.top}" y2="${height - inset.bottom}" hidden/>
+        <circle class="chart-point" cx="0" cy="0" r="5" hidden/>
+        <text class="chart-axis chart-axis-high" x="${width - inset.right}" y="${Math.max(12, y(maximum) - 6)}">${escapeHtml(money(maximum, 2))}</text>
+        <text class="chart-axis" x="${inset.left}" y="${height - 7}">${escapeHtml(formatHistoryDate(first, payload.range))}</text>
+        <text class="chart-axis chart-axis-end" x="${width - inset.right}" y="${height - 7}">${escapeHtml(formatHistoryDate(last, payload.range))}</text>
+      </svg>
+      <div class="chart-tooltip" hidden><strong></strong><span></span></div>
+    </div>
+    ${payload.session ? `<div class="session-stats">
+      ${metricTile('Open', money(number(payload.session.open), 2))}
+      ${metricTile('High', money(number(payload.session.high), 2))}
+      ${metricTile('Low', money(number(payload.session.low), 2))}
+      ${metricTile('Latest', money(number(payload.session.current), 2))}
+    </div>` : ''}`;
+
+  const stage = chart.querySelector('.chart-stage');
+  const svg = chart.querySelector('svg');
+  const crosshair = chart.querySelector('.chart-crosshair');
+  const dot = chart.querySelector('.chart-point');
+  const tooltip = chart.querySelector('.chart-tooltip');
+  const showPoint = event => {
+    const bounds = svg.getBoundingClientRect();
+    const relative = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const index = Math.round(relative * (points.length - 1));
+    const point = points[index];
+    const pointX = x(index);
+    const pointY = y(point.close);
+    crosshair.setAttribute('x1', pointX);
+    crosshair.setAttribute('x2', pointX);
+    crosshair.removeAttribute('hidden');
+    dot.setAttribute('cx', pointX);
+    dot.setAttribute('cy', pointY);
+    dot.removeAttribute('hidden');
+    tooltip.querySelector('strong').textContent = money(point.close, 2);
+    tooltip.querySelector('span').textContent = formatHistoryDate(point, payload.range, true);
+    tooltip.style.left = `${relative * 100}%`;
+    tooltip.classList.toggle('is-left', relative > 0.72);
+    tooltip.hidden = false;
+  };
+  stage.addEventListener('pointermove', showPoint);
+  stage.addEventListener('pointerleave', () => {
+    crosshair.setAttribute('hidden', '');
+    dot.setAttribute('hidden', '');
+    tooltip.hidden = true;
+  });
+
+  const limitedText = payload.limited ? ' Intraday detail builds from snapshots while Kestrel is running.' : '';
+  const rawCount = number(payload.rawPointCount);
+  const sampleText = rawCount && rawCount > points.length ? ` ${rawCount.toLocaleString()} source observations are represented.` : '';
+  const crossCheck = payload.latestCrossCheck?.status === 'review'
+    ? ' The latest daily close and live quote differ enough to warrant caution.'
+    : '';
+  source.textContent = `${payload.method} from ${payload.source}.${limitedText}${sampleText}${crossCheck}`;
+}
+
+function formatHistoryDate(point, range, detailed = false) {
+  const date = new Date(point.timestamp * 1000);
+  if (range === '1d') {
+    return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: detailed ? 'short' : undefined }).format(date);
+  }
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: detailed || range === '1y' || range === '5y' || range === 'all' ? 'numeric' : undefined,
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function renderEvidenceStatus(sec, confidence, marketFetched) {
+  const marketLine = `<p class="plain-reason"><strong>${escapeHtml(confidence)} confidence.</strong> Market and analyst data came through Finnhub at ${escapeHtml(marketFetched)}.</p>`;
+  if (!sec || sec.status === 'error' || sec.status === 'unavailable') {
+    const message = sec?.message || 'The official filing check has not completed yet.';
+    return `${marketLine}<div class="evidence-card is-limited"><strong>Official filing not verified</strong><span>${escapeHtml(message)}</span></div>`;
+  }
+  if (sec.status === 'not_applicable') {
+    return `${marketLine}<div class="evidence-card is-neutral"><strong>Fund assessment</strong><span>${escapeHtml(sec.message)}</span></div>`;
+  }
+
+  const filing = sec.filing || {};
+  const checks = Array.isArray(sec.checks) ? sec.checks : [];
+  const statusText = sec.ratingReady ? 'Official figures agree' : sec.status === 'verified' ? 'Official filing checked' : 'Official filing is incomplete';
+  const statusClass = sec.ratingReady ? 'is-verified' : (sec.conflictCount ? 'is-review' : 'is-limited');
+  const filingLink = filing.url
+    ? `<a href="${escapeHtml(filing.url)}" target="_blank" rel="noopener">Open ${escapeHtml(filing.form || 'filing')} filed ${escapeHtml(filing.filed || '')}</a>`
+    : `<span>${escapeHtml(filing.form || 'Filing')} filed ${escapeHtml(filing.filed || 'on an unknown date')}</span>`;
+  const checkRows = checks.length
+    ? `<div class="source-checks">${checks.map(check => `
+        <div class="source-check" data-status="${escapeHtml(check.status)}">
+          <span>${escapeHtml(check.label)}</span>
+          <strong>${check.status === 'agrees' ? 'Broadly agrees' : 'Needs review'}</strong>
+          <small>Filing ${plainPercent(number(check.officialValue))} · market feed ${plainPercent(number(check.marketValue))}</small>
+        </div>`).join('')}</div>`
+    : '<p class="source-note">The filing is available, but comparable figures were not found for an independent check.</p>';
+
+  return `${marketLine}
+    <div class="evidence-card ${statusClass}">
+      <div class="evidence-card-head"><strong>${escapeHtml(statusText)}</strong><span>${escapeHtml(sec.source || 'U.S. SEC EDGAR')}</span></div>
+      <div class="source-filing">${filingLink}<span>Reporting period ended ${escapeHtml(sec.facts?.periodEnd || filing.periodEnd || '—')}</span></div>
+      ${checkRows}
+    </div>`;
 }
 
 function metricTile(label, value) {
