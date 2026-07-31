@@ -1,4 +1,5 @@
-.DS_Store
-*.log
-node_modules/
-.env
+.kestrel-market-cache.json
+.kestrel-market-cache.tmp
+kestrel-legacy.html
+__pycache__/
+*.pyc

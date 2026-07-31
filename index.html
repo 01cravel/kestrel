@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f5f7">
+  <title>Kestrel — Your daily investment view</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to your portfolio</a>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Kestrel home">
+      <span class="brand-mark" aria-hidden="true">K</span>
+      <span>
+        <strong>Kestrel</strong>
+        <small>Your investment view</small>
+      </span>
+    </a>
+
+    <div class="topbar-actions">
+      <div class="data-state" id="dataState" role="status" aria-live="polite">
+        <span class="state-dot is-loading" id="stateDot"></span>
+        <span id="stateText">Preparing your assessment</span>
+      </div>
+      <button class="button button-quiet" id="editHoldingsButton" type="button">Edit holdings</button>
+      <button class="button button-dark" id="refreshButton" type="button">Refresh evidence</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="morning-brief" aria-labelledby="briefTitle">
+      <div class="brief-date">
+        <span id="todayLabel">Today</span>
+        <strong id="todayDate">—</strong>
+      </div>
+      <div class="brief-copy">
+        <p class="eyebrow">Your daily answer</p>
+        <h1 id="briefTitle">Building your first evidence baseline.</h1>
+        <p id="briefDetail">Holdings appear as their price, company figures and analyst evidence arrive.</p>
+      </div>
+      <dl class="brief-counts" aria-label="Portfolio action counts">
+        <div><dt>Act now</dt><dd id="actNowCount">—</dd></div>
+        <div><dt>Keep</dt><dd id="holdCount">—</dd></div>
+        <div><dt>New ideas</dt><dd id="ideaCount">—</dd></div>
+      </dl>
+    </section>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-copy"><span id="progressText">Starting research</span><span id="progressNumber">0%</span></div>
+      <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+    </div>
+
+    <section class="section" aria-labelledby="changesTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What changed</p>
+          <h2 id="changesTitle">Changes that deserve your attention</h2>
+        </div>
+        <p>Only meaningful changes appear here.</p>
+      </div>
+      <div class="change-list" id="changesList">
+        <div class="empty-card">
+          <strong>Establishing your starting point</strong>
+          <span>Once the baseline is saved, Kestrel will call out rating changes here.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="holdingsTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What you own</p>
+          <h2 id="holdingsTitle">Your holdings</h2>
+        </div>
+        <p id="portfolioValue">Waiting for current prices</p>
+      </div>
+
+      <div class="assessment-list" id="holdingsList" aria-live="polite"></div>
+    </section>
+
+    <section class="section opportunity-section" aria-labelledby="opportunitiesTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What you may be missing</p>
+          <h2 id="opportunitiesTitle">Strong opportunities you do not own</h2>
+        </div>
+        <p>A short list, ranked by evidence—not popularity.</p>
+      </div>
+
+      <div class="opportunity-grid" id="opportunitiesList" aria-live="polite">
+        <div class="empty-card wide">
+          <strong>Checking the opportunity list</strong>
+          <span>Holdings are assessed first. New ideas will follow.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="guardrail" aria-labelledby="guardrailTitle">
+      <div>
+        <p class="eyebrow">Important guardrail</p>
+        <h2 id="guardrailTitle">A strong rating is not a promise.</h2>
+      </div>
+      <p>Kestrel separates the attractiveness of an investment from confidence in the evidence. “Ultra Buy” stays locked until company filings independently confirm the numbers.</p>
+    </section>
+  </main>
+
+  <footer>
+    <span>Kestrel is decision support for a long-term portfolio.</span>
+    <button class="text-button" id="methodButton" type="button">How ratings work</button>
+  </footer>
+
+  <dialog id="detailDialog" class="dialog">
+    <div class="dialog-shell">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close details">×</button>
+      <div id="detailContent"></div>
+    </div>
+  </dialog>
+
+  <dialog id="holdingsDialog" class="dialog">
+    <form class="dialog-shell holdings-form" id="holdingsForm" method="dialog">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close holdings editor">×</button>
+      <p class="eyebrow">Portfolio setup</p>
+      <h2>Edit your holdings</h2>
+      <p class="dialog-intro">Shares calculate position size. Average cost is optional and only used to show your gain or loss.</p>
+      <div class="holdings-form-head" aria-hidden="true"><span>Company</span><span>Shares</span><span>Average cost</span></div>
+      <div id="holdingsFields"></div>
+      <div class="form-actions">
+        <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
+        <button class="button button-dark" type="submit">Save holdings</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="methodDialog" class="dialog">
+    <div class="dialog-shell method-copy">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close methodology">×</button>
+      <p class="eyebrow">Plain-English method</p>
+      <h2>How Kestrel reaches a view</h2>
+      <div class="method-grid">
+        <div><strong>Business health</strong><span>Are sales, profits and returns healthy?</span></div>
+        <div><strong>Price</strong><span>Does today’s price look sensible against earnings and growth?</span></div>
+        <div><strong>Direction</strong><span>Is the company improving or weakening?</span></div>
+        <div><strong>Analysts</strong><span>Are credible analysts broadly positive, and is their view changing?</span></div>
+        <div><strong>Risk</strong><span>Could debt, volatility or concentration make this unsafe for your portfolio?</span></div>
+        <div><strong>Confidence</strong><span>Is the evidence complete, current and independently checked?</span></div>
+      </div>
+      <p class="method-note">Hold is the normal answer. Missing evidence never counts as positive evidence.</p>
+    </div>
+  </dialog>
+
+  <template id="loadingRowTemplate">
+    <article class="assessment-row is-loading-row">
+      <div class="loading-block loading-action"></div>
+      <div class="loading-block"></div>
+      <div class="loading-block"></div>
+    </article>
+  </template>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

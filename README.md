@@ -1,17 +1,26 @@
 # Kestrel
 
-Personal portfolio intelligence dashboard.
+A plain-English daily view of a long-term stock portfolio.
 
-Single-file HTML app combining live portfolio tracking, analyst data,
-insider activity, TradingView chart embeds, screener CSV import, and
-live alerts via TradingView webhooks → Pipedream.
+Kestrel answers two questions:
 
-## Running
+- What should I do with the investments I already own?
+- Which strong opportunities am I currently missing?
 
-Open `kestrel.html` in a browser. That's it.
+## Run locally
 
-## Configuration
+```sh
+FINNHUB_KEY="your-key" python3 server.py
+```
 
-- Finnhub and FMP API keys are baked into the file
-- Pipedream webhook URLs are baked into the file
-- Portfolio positions are stored in localStorage
+Then open [http://127.0.0.1:3050](http://127.0.0.1:3050).
+
+The local server keeps API credentials out of the browser, loads evidence progressively,
+and caches results so the dashboard does not start blank after every restart.
+
+## Data and ratings
+
+- Prices, company metrics, and analyst consensus currently come from Finnhub.
+- Positions remain in browser local storage.
+- Ratings are deliberately capped below `Ultra Buy` until official filing checks are connected.
+- The previous prototype can be kept locally as `kestrel-legacy.html`, but is deliberately excluded from Git because it may contain credentials and private portfolio data.
