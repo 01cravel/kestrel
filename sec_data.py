@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import socket
 import threading
 import time
 import urllib.error
@@ -59,7 +60,7 @@ def _sec_json(url: str) -> Any:
         except urllib.error.HTTPError as error:
             _LAST_REQUEST = time.monotonic()
             raise RuntimeError(f"SEC returned HTTP {error.code}") from error
-        except (urllib.error.URLError, TimeoutError, ValueError) as error:
+        except (urllib.error.URLError, TimeoutError, socket.timeout, ValueError) as error:
             _LAST_REQUEST = time.monotonic()
             raise RuntimeError("SEC filing data was unavailable") from error
 
@@ -77,6 +78,26 @@ def _ticker_map() -> Dict[str, Dict[str, Any]]:
         if isinstance(item, dict) and item.get("ticker")
     }
     return _TICKER_MAP
+
+
+def sec_identity(symbol: str) -> Dict[str, Any]:
+    """Return the SEC's compact company identity for a ticker."""
+    company = _ticker_map().get(symbol.upper())
+    if not company:
+        return {
+            "status": "unavailable",
+            "symbol": symbol.upper(),
+            "source": "SEC company ticker directory",
+            "sourceUrl": "https://www.sec.gov/files/company_tickers.json",
+        }
+    return {
+        "status": "verified",
+        "symbol": str(company.get("ticker") or symbol).upper(),
+        "name": company.get("title"),
+        "cik": f"{int(company['cik_str']):010d}",
+        "source": "SEC company ticker directory",
+        "sourceUrl": "https://www.sec.gov/files/company_tickers.json",
+    }
 
 
 def _latest_filing(submissions: Dict[str, Any]) -> Optional[Dict[str, Any]]:

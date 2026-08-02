@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import threading
 import time
 import urllib.error
@@ -18,33 +19,106 @@ from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
 from analyst_data import fetch_analyst_intelligence
-from price_history import FMP_KEY, historical_prices, intraday_prices
+from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
+from investor_history import investor_calibration_summary, record_investor_ideas
+from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
+from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
 from sec_data import verify_with_sec
+from security_master import refresh_security_master, security_master_snapshot
+from sarwa_sync import connection_status, discard_pending, mark_applied, pending_positions, stage_snapshot
 from signal_history import calibration_summary, record_signals
+from source_policy import build_evidence_summary, evidence_policy
+from superinvestors import refresh_superinvestors, superinvestor_snapshot
 
 
 ROOT = Path(__file__).resolve().parent
 CACHE_PATH = ROOT / ".kestrel-market-cache.json"
+PORTFOLIO_PATH = ROOT / ".kestrel-portfolio.json"
+PORTFOLIO_BACKUP_PATH = ROOT / ".kestrel-portfolio-backup.json"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("KESTREL_PORT", "3050"))
 
 HOLDINGS_UNIVERSE = [
     "MU", "SPY", "NBIS", "VRT", "V", "GLD", "CAT", "NVDA", "RKLB", "LLY",
     "MA", "HCA", "AVGO", "STX", "GOOGL", "AXP", "AMD", "CEG", "QBTS", "COHR", "ONDS",
+    "DELL", "ETN", "CRDO", "MRVL", "NOW", "RGTI", "SPCX", "BTC",
 ]
 
-OPPORTUNITY_UNIVERSE = [
+BASE_OPPORTUNITY_UNIVERSE = [
     "MSFT", "AMZN", "META", "AAPL", "TSM", "ASML", "COST", "HD", "LIN", "ISRG",
     "NVO", "MELI", "SAP", "SONY", "UL", "TTE",
 ]
 
-ALL_SYMBOLS = list(dict.fromkeys(HOLDINGS_UNIVERSE + OPPORTUNITY_UNIVERSE))
+BASE_ALL_SYMBOLS = list(dict.fromkeys(HOLDINGS_UNIVERSE + BASE_OPPORTUNITY_UNIVERSE))
 API_GAP_SECONDS = 1.05
 QUOTE_REFRESH_SECONDS = 15 * 60
 FULL_REFRESH_SECONDS = 6 * 60 * 60
 SEC_REFRESH_SECONDS = 24 * 60 * 60
 ANALYST_REFRESH_SECONDS = 24 * 60 * 60
-SEC_EXCLUDED_SYMBOLS = {"SPY", "GLD"}
+SEC_EXCLUDED_SYMBOLS = {"SPY", "GLD", "BTC"}
+MARKET_SYMBOLS = {"BTC": "BINANCE:BTCUSDT"}
+PORTFOLIO_LOCK = threading.Lock()
+
+
+def clean_positions(raw_positions: Any) -> Dict[str, Dict[str, Any]]:
+    if not isinstance(raw_positions, dict):
+        raise ValueError("Positions must be an object")
+    cleaned: Dict[str, Dict[str, Any]] = {}
+    for symbol, raw_position in raw_positions.items():
+        normalized_symbol = str(symbol).upper()
+        if normalized_symbol not in HOLDINGS_UNIVERSE or not isinstance(raw_position, dict):
+            continue
+        try:
+            shares = float(raw_position.get("shares"))
+        except (TypeError, ValueError):
+            continue
+        if shares <= 0:
+            continue
+        raw_cost = raw_position.get("cost")
+        try:
+            cost = float(raw_cost) if raw_cost is not None else None
+        except (TypeError, ValueError):
+            cost = None
+        cleaned[normalized_symbol] = {
+            "shares": round(shares, 8),
+            "cost": round(cost, 8) if cost is not None and cost > 0 else None,
+        }
+    return cleaned
+
+
+def load_portfolio() -> Dict[str, Any]:
+    with PORTFOLIO_LOCK:
+        try:
+            payload = json.loads(PORTFOLIO_PATH.read_text(encoding="utf-8"))
+            positions = clean_positions(payload.get("positions", {}))
+            return {
+                "positions": positions,
+                "updatedAt": payload.get("updatedAt"),
+                "source": "private local portfolio file",
+            }
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return {"positions": {}, "updatedAt": None, "source": "browser storage"}
+
+
+def save_portfolio(raw_positions: Any) -> Dict[str, Any]:
+    positions = clean_positions(raw_positions)
+    if not positions:
+        raise ValueError("At least one holding is required")
+    payload = {
+        "positions": positions,
+        "updatedAt": int(time.time()),
+        "version": 1,
+    }
+    temporary_path = ROOT / ".kestrel-portfolio.tmp"
+    with PORTFOLIO_LOCK:
+        if PORTFOLIO_PATH.exists():
+            try:
+                PORTFOLIO_BACKUP_PATH.write_text(PORTFOLIO_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+            except OSError:
+                pass
+        temporary_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temporary_path.replace(PORTFOLIO_PATH)
+    return {**payload, "source": "private local portfolio file"}
 
 
 def load_finnhub_key() -> str:
@@ -71,13 +145,28 @@ STATE: Dict[str, Any] = {
     "message": "Preparing the first assessment",
     "data": {},
     "completed": 0,
-    "total": len(ALL_SYMBOLS),
+    "total": len(BASE_ALL_SYMBOLS),
     "lastFullRefresh": None,
     "lastQuoteRefresh": None,
     "keyConfigured": bool(FINNHUB_KEY),
     "historyKeyConfigured": bool(FMP_KEY),
+    "institutionalDataConfigured": bool(DATABENTO_API_KEY),
+    "namedAnalystDataConfigured": bool(BENZINGA_API_KEY),
     "priceSnapshots": {},
 }
+
+
+def opportunity_universe() -> List[str]:
+    discovered = [
+        str(idea.get("symbol") or "").upper()
+        for idea in superinvestor_snapshot().get("ideas", [])
+        if idea.get("symbol")
+    ]
+    return list(dict.fromkeys(BASE_OPPORTUNITY_UNIVERSE + discovered))
+
+
+def all_symbols() -> List[str]:
+    return list(dict.fromkeys(HOLDINGS_UNIVERSE + opportunity_universe()))
 
 
 def load_cache() -> None:
@@ -92,7 +181,9 @@ def load_cache() -> None:
             STATE["lastFullRefresh"] = cached.get("lastFullRefresh")
             STATE["lastQuoteRefresh"] = cached.get("lastQuoteRefresh")
             STATE["priceSnapshots"] = cached.get("priceSnapshots", {})
-            STATE["completed"] = sum(1 for symbol in ALL_SYMBOLS if symbol in STATE["data"])
+            symbols = all_symbols()
+            STATE["total"] = len(symbols)
+            STATE["completed"] = sum(1 for symbol in symbols if symbol in STATE["data"])
             STATE["status"] = "cached"
             STATE["message"] = "Showing saved evidence while fresh data loads"
     except (OSError, ValueError, TypeError):
@@ -134,7 +225,7 @@ def finnhub(path: str, params: Dict[str, str]) -> Any:
     except urllib.error.HTTPError as error:
         LAST_API_CALL = time.monotonic()
         raise RuntimeError(f"Finnhub returned HTTP {error.code}") from error
-    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+    except (urllib.error.URLError, TimeoutError, socket.timeout, ValueError) as error:
         LAST_API_CALL = time.monotonic()
         raise RuntimeError("Market data was unavailable") from error
 
@@ -210,8 +301,16 @@ def fetch_symbol(symbol: str, quote_only: bool = False) -> Dict[str, Any]:
     errors: List[str] = []
     result = previous
 
+    if not quote_only and symbol not in BASE_ALL_SYMBOLS and not result.get("profile"):
+        try:
+            profile = finnhub("stock/profile2", {"symbol": symbol})
+            if isinstance(profile, dict) and profile.get("name"):
+                result["profile"] = profile
+        except RuntimeError as error:
+            errors.append(str(error))
+
     try:
-        quote = finnhub("quote", {"symbol": symbol})
+        quote = finnhub("quote", {"symbol": MARKET_SYMBOLS.get(symbol, symbol)})
         if isinstance(quote, dict) and quote.get("c"):
             result["quote"] = quote
             record_price_snapshot(symbol, quote)
@@ -220,7 +319,21 @@ def fetch_symbol(symbol: str, quote_only: bool = False) -> Dict[str, Any]:
     except RuntimeError as error:
         errors.append(str(error))
 
-    if not quote_only:
+    if not quote_only and symbol == "BTC":
+        result["metrics"] = {}
+        result["recommendations"] = []
+        result["earnings"] = []
+        result["analystIntelligence"] = {
+            "status": "not_applicable",
+            "message": "Stock analyst estimates do not apply to Bitcoin.",
+            "fetchedAt": int(time.time()),
+        }
+        result["sec"] = {
+            "status": "not_applicable",
+            "message": "Company filing checks do not apply to Bitcoin.",
+            "verifiedAt": int(time.time()),
+        }
+    elif not quote_only:
         try:
             metrics = finnhub("stock/metric", {"symbol": symbol, "metric": "all"})
             metric_values = metrics.get("metric") if isinstance(metrics, dict) else None
@@ -291,24 +404,38 @@ def fetch_symbol(symbol: str, quote_only: bool = False) -> Dict[str, Any]:
     return result
 
 
-def full_refresh() -> None:
+def full_refresh(only_missing: bool = False) -> None:
     if not FINNHUB_KEY:
         with STATE_LOCK:
             STATE["status"] = "error"
             STATE["message"] = "A Finnhub API key is required"
         return
 
+    symbols = all_symbols()
+    with STATE_LOCK:
+        existing_data = dict(STATE["data"])
+    targets = symbols
+    if only_missing:
+        targets = [
+            symbol for symbol in symbols
+            if symbol not in existing_data
+            or not existing_data[symbol].get("quote")
+            or "sec" not in existing_data[symbol]
+            or "analystIntelligence" not in existing_data[symbol]
+        ]
+    completed_before = len(symbols) - len(targets)
     with STATE_LOCK:
         STATE["status"] = "refreshing"
-        STATE["message"] = "Checking holdings first, then new opportunities"
-        STATE["completed"] = 0
+        STATE["message"] = "Checking newly discovered ideas" if only_missing else "Checking holdings first, then new opportunities"
+        STATE["completed"] = completed_before
+        STATE["total"] = len(symbols)
 
-    for index, symbol in enumerate(ALL_SYMBOLS, start=1):
+    for index, symbol in enumerate(targets, start=completed_before + 1):
         assessment_data = fetch_symbol(symbol)
         with STATE_LOCK:
             STATE["data"][symbol] = assessment_data
             STATE["completed"] = index
-            STATE["message"] = f"Checked {index} of {len(ALL_SYMBOLS)} companies"
+            STATE["message"] = f"Checked {index} of {len(symbols)} companies"
         save_cache()
 
     now = int(time.time())
@@ -327,7 +454,7 @@ def quote_refresh() -> None:
         STATE["status"] = "refreshing"
         STATE["message"] = "Updating prices"
 
-    for symbol in ALL_SYMBOLS:
+    for symbol in all_symbols():
         assessment_data = fetch_symbol(symbol, quote_only=True)
         with STATE_LOCK:
             STATE["data"][symbol] = assessment_data
@@ -342,16 +469,21 @@ def quote_refresh() -> None:
 
 def data_worker() -> None:
     load_cache()
+    symbols = all_symbols()
     with STATE_LOCK:
         has_complete_cache = all(
             symbol in STATE["data"]
             and "sec" in STATE["data"][symbol]
             and "analystIntelligence" in STATE["data"][symbol]
-            for symbol in ALL_SYMBOLS
+            for symbol in symbols
         )
         last_full = STATE.get("lastFullRefresh") or 0
 
-    if not has_complete_cache or time.time() - last_full > FULL_REFRESH_SECONDS:
+    if not has_complete_cache:
+        full_refresh(only_missing=True)
+        # A simultaneous manager refresh may have queued the same discovery work.
+        REFRESH_EVENT.clear()
+    elif time.time() - last_full > FULL_REFRESH_SECONDS:
         full_refresh()
     else:
         with STATE_LOCK:
@@ -384,7 +516,47 @@ class KestrelHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/portfolio":
+            self.send_json(load_portfolio())
+            return
+        if parsed.path == "/api/sarwa":
+            portfolio = load_portfolio()
+            self.send_json(connection_status(len(portfolio.get("positions") or {})))
+            return
+        if parsed.path == "/api/evidence":
+            with STATE_LOCK:
+                data = dict(STATE["data"])
+            portfolio = load_portfolio()
+            sarwa = connection_status(len(portfolio.get("positions") or {}))
+            symbols = all_symbols()
+            identity = security_master_snapshot(symbols)
+            market = market_integrity_snapshot(symbols, data, identity.get("instruments"))
+            named_analysts = named_analyst_snapshot(symbols, data)
+            self.send_json(evidence_policy(
+                data, sarwa, identity.get("summary"), market.get("summary"), named_analysts.get("summary")
+            ))
+            return
+        if parsed.path == "/api/security-master":
+            self.send_json(security_master_snapshot(all_symbols()))
+            return
+        if parsed.path == "/api/market-integrity":
+            with STATE_LOCK:
+                data = dict(STATE["data"])
+            symbols = all_symbols()
+            identity = security_master_snapshot(symbols)
+            self.send_json(market_integrity_snapshot(symbols, data, identity.get("instruments")))
+            return
+        if parsed.path == "/api/analyst-sources":
+            with STATE_LOCK:
+                data = dict(STATE["data"])
+            self.send_json(named_analyst_snapshot(all_symbols(), data))
+            return
+        if parsed.path == "/api/superinvestors":
+            self.send_json(superinvestor_snapshot())
+            return
         if parsed.path == "/api/dashboard":
+            opportunities = opportunity_universe()
+            symbols = list(dict.fromkeys(HOLDINGS_UNIVERSE + opportunities))
             with STATE_LOCK:
                 payload = {
                     "status": STATE["status"],
@@ -395,17 +567,31 @@ class KestrelHandler(SimpleHTTPRequestHandler):
                     "lastQuoteRefresh": STATE["lastQuoteRefresh"],
                     "keyConfigured": STATE["keyConfigured"],
                     "historyKeyConfigured": STATE["historyKeyConfigured"],
+                    "institutionalDataConfigured": STATE["institutionalDataConfigured"],
+                    "namedAnalystDataConfigured": STATE["namedAnalystDataConfigured"],
                     "holdingsUniverse": HOLDINGS_UNIVERSE,
-                    "opportunityUniverse": OPPORTUNITY_UNIVERSE,
+                    "opportunityUniverse": opportunities,
                     "data": dict(STATE["data"]),
                 }
+            portfolio = load_portfolio()
+            sarwa = connection_status(len(portfolio.get("positions") or {}))
+            identity = security_master_snapshot(symbols)
+            market = market_integrity_snapshot(symbols, payload["data"], identity.get("instruments"))
+            named_analysts = named_analyst_snapshot(symbols, payload["data"])
+            payload["securityMaster"] = identity
+            payload["marketIntegrity"] = market
+            payload["namedAnalysts"] = named_analysts
+            payload["superinvestors"] = superinvestor_snapshot()
+            payload["evidencePolicy"] = build_evidence_summary(
+                payload["data"], sarwa, identity.get("summary"), market.get("summary"), named_analysts.get("summary")
+            )
             self.send_json(payload)
             return
         if parsed.path == "/api/history":
             query = urllib.parse.parse_qs(parsed.query)
             symbol = str(query.get("symbol", [""])[0]).upper()
             range_name = str(query.get("range", ["1y"])[0]).lower()
-            if symbol not in ALL_SYMBOLS:
+            if symbol not in all_symbols():
                 self.send_json({"ok": False, "message": "Unknown symbol"}, status=400)
                 return
             try:
@@ -432,13 +618,89 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             except (RuntimeError, ValueError) as error:
                 self.send_json({"ok": False, "message": str(error)}, status=502)
             return
+        if parsed.path == "/api/performance":
+            query = urllib.parse.parse_qs(parsed.query)
+            raw_symbols = str(query.get("symbols", [""])[0])
+            symbols = list(dict.fromkeys(
+                symbol.strip().upper() for symbol in raw_symbols.split(",") if symbol.strip()
+            ))
+            universe = all_symbols()
+            if not symbols or len(symbols) > len(universe):
+                self.send_json({"ok": False, "message": "Choose between 1 and 37 symbols"}, status=400)
+                return
+            if any(symbol not in universe for symbol in symbols):
+                self.send_json({"ok": False, "message": "Unknown symbol"}, status=400)
+                return
+            try:
+                self.send_json(benchmark_performance(symbols))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
+        if parsed.path == "/api/portfolio-risk":
+            query = urllib.parse.parse_qs(parsed.query)
+            raw_symbols = str(query.get("symbols", [""])[0])
+            symbols = list(dict.fromkeys(
+                symbol.strip().upper() for symbol in raw_symbols.split(",") if symbol.strip()
+            ))
+            universe = all_symbols()
+            if not symbols or len(symbols) > len(universe):
+                self.send_json({"ok": False, "message": f"Choose between 1 and {len(universe)} symbols"}, status=400)
+                return
+            if any(symbol not in universe for symbol in symbols):
+                self.send_json({"ok": False, "message": "Unknown symbol"}, status=400)
+                return
+            try:
+                self.send_json(portfolio_risk_statistics(symbols))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
         if parsed.path == "/api/calibration":
             self.send_json(calibration_summary())
+            return
+        if parsed.path == "/api/investor-calibration":
+            self.send_json(investor_calibration_summary())
             return
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/portfolio":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > 100_000:
+                    raise ValueError("Invalid portfolio payload size")
+                body = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                positions = body.get("positions") if isinstance(body, dict) else None
+                self.send_json({"ok": True, **save_portfolio(positions)})
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=400)
+            return
+        if parsed.path == "/api/sarwa/snapshot":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > 1_000_000:
+                    raise ValueError("Invalid Sarwa snapshot size")
+                body = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                portfolio = load_portfolio()
+                pending = stage_snapshot(body, portfolio.get("positions") or {}, HOLDINGS_UNIVERSE)
+                self.send_json({"ok": True, "pending": pending})
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=400)
+            return
+        if parsed.path == "/api/sarwa/apply":
+            try:
+                positions = pending_positions()
+                save_portfolio(positions)
+                mark_applied()
+                self.send_json({"ok": True, "portfolio": load_portfolio(), "sarwa": connection_status(len(positions))})
+            except (OSError, ValueError, TypeError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=400)
+            return
+        if parsed.path == "/api/sarwa/discard":
+            discard_pending()
+            portfolio = load_portfolio()
+            self.send_json({"ok": True, "sarwa": connection_status(len(portfolio.get("positions") or {}))})
+            return
         if parsed.path == "/api/signals":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -449,6 +711,20 @@ class KestrelHandler(SimpleHTTPRequestHandler):
                 if not isinstance(rows, list):
                     raise ValueError("Signals must be a list")
                 summary = record_signals(rows, body.get("evidenceTimestamp"))
+                self.send_json({"ok": True, "calibration": summary})
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=400)
+            return
+        if parsed.path == "/api/investor-signals":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > 1_000_000:
+                    raise ValueError("Invalid investor signal payload size")
+                body = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                rows = body.get("ideas") if isinstance(body, dict) else None
+                if not isinstance(rows, list):
+                    raise ValueError("Investor ideas must be a list")
+                summary = record_investor_ideas(rows, body.get("benchmarkPrice"))
                 self.send_json({"ok": True, "calibration": summary})
             except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
                 self.send_json({"ok": False, "message": str(error)}, status=400)
@@ -473,6 +749,46 @@ class KestrelHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     worker = threading.Thread(target=data_worker, name="kestrel-data", daemon=True)
     worker.start()
+    identity_worker = threading.Thread(
+        target=refresh_security_master,
+        args=(all_symbols(),),
+        name="kestrel-security-master",
+        daemon=True,
+    )
+    identity_worker.start()
+    market_worker = threading.Thread(
+        target=refresh_market_integrity,
+        args=(all_symbols(),),
+        name="kestrel-market-integrity",
+        daemon=True,
+    )
+    market_worker.start()
+    def analyst_source_worker() -> None:
+        time.sleep(1)
+        with STATE_LOCK:
+            data = dict(STATE["data"])
+        refresh_named_analysts(all_symbols(), data)
+
+    named_worker = threading.Thread(
+        target=analyst_source_worker,
+        name="kestrel-named-analysts",
+        daemon=True,
+    )
+    named_worker.start()
+    def superinvestor_worker() -> None:
+        before = set(BASE_ALL_SYMBOLS)
+        refresh_superinvestors()
+        after = set(all_symbols())
+        if after - before:
+            refresh_security_master(sorted(after))
+            REFRESH_EVENT.set()
+
+    manager_worker = threading.Thread(
+        target=superinvestor_worker,
+        name="kestrel-superinvestors",
+        daemon=True,
+    )
+    manager_worker.start()
     server = ThreadingHTTPServer((HOST, PORT), KestrelHandler)
     print(f"Kestrel is running at http://{HOST}:{PORT}/", flush=True)
     server.serve_forever()

@@ -8,17 +8,107 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 - Plain-English actions: Hold, Sell, Buy, and Ultra Buy.
 - Confidence shown separately from the action.
 - Progressive market-data loading and a local cache.
-- Ultra Buy requires independent official-source agreement and a portfolio concentration check.
+- Ultra Buy remains locked until official filings, institutional pricing, validated corporate actions, point-in-time estimates and whole-portfolio risk checks all pass.
 
 ## Delivery status
 
+- 🚧 **Next priority: build Luke’s selection-agnostic Ideal Portfolio for an 8/10 risk mandate.**
+- ✅ Private Sarwa snapshot staging, reconciliation, backups, and a review-before-apply dashboard flow.
+- ✅ First signed-in Sarwa Trade capture: 24 positions, cash, account total, and a validated comparison against Kestrel.
 - ✅ SEC filing verification, source links, conflict checks, and confidence gates.
+- ✅ Machine-readable source hierarchy, evidence-health API, dashboard truth status, and a global Medium-confidence ceiling while critical sources remain provisional.
+- ✅ Permanent security master using OpenFIGI and SEC CIK, with fund/ADR handling, ambiguity refusal, and per-instrument confidence gates.
+- ✅ Cost-controlled market integrity: daily prices are independently cross-checked, stale data is rejected, and adjusted histories are scanned for unexplained split-sized jumps. Databento pay-as-you-go official closes remain an optional upgrade; no $199 subscription is required.
 - ✅ Interactive `1D`, `1W`, `1M`, `1Y`, `5Y`, and `All` price graph.
 - ✅ Sector-aware valuation with conservative, reasonable, and optimistic ranges.
 - ✅ Daily thesis, earnings-surprise history, and analyst-estimate baselines.
+- ✅ Plain-English owner guide for every current holding: what it does, how it can build wealth, its biggest risk, and the exact Buy/Strong Buy analyst vote with all vote categories retained.
+- ✅ Named-analyst evidence adapter for Benzinga, including firm, analyst, rating and target changes, recency, accuracy metadata and cross-provider disagreement gates. Trial access and the full-universe audit remain pending.
 - ✅ Opportunity-versus-holding comparisons, concentration checks, and a simple stress test.
 - ✅ Point-in-time signal journal, model versions, and the first 30-day calibration method.
-- 🚧 Benchmark-relative outcomes, correlation, tax settings, and international local-market sources remain in progress.
+- ✅ Company-level SEC 13F discovery: duplicate share classes are merged, every idea shows its exact independent pass/fail result, and investor conviction is capped at a five-point decision-rank adjustment.
+- 🚧 Manager-skill validation journal: new and increased positions are now stored against SPY for 90-, 180-, and 365-day review. No manager earns extra trust before ten full one-year outcomes.
+- ✅ Benchmark-relative holding and portfolio performance across 1 month, 1 year, and 5 years.
+- 🚧 Correlation, tax settings, and international local-market sources remain in progress.
+
+## Immediate next — Complete the truth layer
+
+The source policy is now explicit in [SOURCE_POLICY.md](SOURCE_POLICY.md). Kestrel currently has authoritative portfolio records and US filings, but pricing, corporate actions, security identity, international filings, fund look-through, analyst expectations and the portfolio risk model are not yet strong enough for the highest-confidence decisions.
+
+1. ✅ Build a permanent security master using FIGI plus regulator, exchange, currency and share-class identifiers. A ticker alone is not an identity.
+2. 🚧 Strengthen prices and corporate actions without imposing a permanent fee. The default layer now uses two price feeds, stale-data checks, public split events and adjusted-history discontinuity detection. Add Databento pay-as-you-go official closes when the free account is ready. Reconsider premium reference data only after measured avoided errors or improved decisions exceed its annual cost.
+3. 🚧 Add accountable analyst evidence. The Benzinga named-ratings adapter is complete and requires at least three recent firms plus agreement with the broader consensus. Test its free API trial across the full portfolio before paying. Add Morningstar independent fair value as a separate valuation check only if the licence proves worthwhile; reserve LSEG I/B/E/S or FactSet for a later institutional upgrade.
+   - Preserve every analyst call exactly as published and score its 3-, 6- and 12-month result against the relevant benchmark. Vendor accuracy statistics may be shown, but Kestrel’s own point-in-time outcome record decides how much trust each analyst earns.
+4. Add issuer holdings, prospectus fees and SEC Form N-PORT for ETFs.
+5. Add FRED/ALFRED and original-agency vintages for rates, inflation and macro regimes.
+6. Expand official filing ingestion market by market through ESMA ESEF, FCA NSM and local regulators.
+7. Only then unlock High confidence, Ultra Buy and Ideal Portfolio target weights that depend on those inputs.
+
+### No-cost accuracy upgrades before another data subscription
+
+1. Ingest SEC Form 4 insider purchases and sales directly, separating meaningful open-market buying from routine share awards and tax sales.
+2. ✅ Ingest SEC 13F filings directly and compare institutional positions quarter by quarter, while clearly showing the reporting delay. Eight long-equity managers now feed a separate research-candidate tape; share classes are merged at company level, every discovery receives an exact independent verdict, and disclosed conviction can refine—but never override—the research and confidence gates.
+3. Capture company-issued guidance and earnings releases from SEC filings and investor-relations pages, then compare management’s latest range with its previous range and the analyst consensus.
+4. Compare each valuation with the company’s own history and genuinely similar businesses; never use a broad sector average when the business model is materially different.
+5. Preserve the full monthly analyst vote distribution and flag improving or weakening breadth, rather than relying only on today’s consensus percentage.
+6. Measure every Kestrel Buy, Hold and Sell against later returns, drawdowns, earnings changes and the correct benchmark before increasing the weight of any signal.
+
+## Immediate next — Mission and Ideal Portfolio
+
+**Mission:** Maximise long-term wealth using the strongest evidence Kestrel can obtain, at a target risk level of 8/10. The horizon is open-ended, the investable universe is global, and no industry or sector receives a preference. Existing holdings must not influence the ideal answer; they are compared with it only after the target portfolio is built.
+
+- Keep two separate views: **Current Portfolio** explains what Luke owns; **Ideal Portfolio** shows what Kestrel would choose from scratch.
+- Treat the open-ended horizon, global universe, sector neutrality, and 8/10 risk appetite as locked. Add liquidity needs, expected contributions, tax position, base currency, exclusions, and maximum acceptable drawdown when they become relevant to the transition plan.
+- Treat 8/10 as an aggressive risk budget, not permission for uncontrolled concentration. Measure both Luke’s willingness to take risk and his financial capacity to withstand losses.
+- Search a broad global universe without sector quotas, then filter for source quality, liquidity, financial strength, valuation, durable growth, governance, and evidence freshness.
+- Build the core asset allocation before choosing individual names. Diversify across companies, sectors, countries, currencies, and return drivers.
+- Optimise for robust long-term risk-adjusted wealth, not the most optimistic point forecast. Use expected-return ranges, volatility, correlations, stress scenarios, and estimation-error penalties.
+- Set explicit limits for single positions, sectors, countries, speculative holdings, crypto, and correlated themes. An 8/10 portfolio may be aggressive while still refusing uncompensated risk.
+- Show the ideal weights, the current weights, the difference, why each asset earned its place, expected range of outcomes, and the largest plausible drawdown.
+- Create a separate transition plan that accounts for taxes, trading costs, liquidity, and turnover. Never distort the ideal portfolio merely to defend an existing choice.
+- Backtest only with point-in-time data, then run proposed changes in shadow mode. Never call a portfolio “perfect” or allow it to trade automatically.
+
+## Immediate priority — Sarwa connection
+
+The aim is to replace manual share counts and costs with a dependable view of the real Sarwa account. This connection must remain read-only: Kestrel may collect and reconcile portfolio data, but it must never place trades, move money, change account settings, or weaken Sarwa security.
+
+### 1. Ask for the safest official route first
+
+- Contact Sarwa support and request a documented read-only portfolio API, partner feed, or complete machine-readable export for Sarwa Trade and Sarwa Invest.
+- Confirm the permitted refresh rate, authentication method, account coverage, data fields, and whether automated personal access is allowed.
+- Prefer an official API or export over browser automation whenever one becomes available.
+- Record the integration method and Sarwa’s answer in the evidence log; do not infer permission from an undocumented internal endpoint.
+
+### 2. Build statement import as the dependable baseline
+
+- Import Sarwa Invest activity statements downloaded from the web dashboard and Sarwa Trade monthly statements from the app.
+- Parse holdings, share counts, average prices, cash, deposits, withdrawals, dividends, fees, and transactions where supplied.
+- Preview all changes before applying them and clearly flag missing, duplicated, or conflicting rows.
+- Keep the original statement locally as the source record and never publish it to Git.
+
+### 3. Add a guarded desktop sync only if no official integration exists
+
+- ✅ Use Luke’s existing signed-in desktop browser session to read Sarwa Trade balance, cash, and positions without storing credentials.
+- ✅ Run the same verified capture every day at 12:30 PM Dubai time and surface a clear login-needed message when the session expires.
+- Schedule Sarwa Invest/Save checks after the normal daily update window; these accounts reflect the previous market close and usually update before noon.
+- Never store the Sarwa password or email OTP in Kestrel. Pause and ask Luke to complete login whenever Sarwa requires two-factor authentication.
+- Restrict automation to an explicit read-only list of portfolio and statement pages. Do not expose trade, transfer, withdrawal, funding, security, or account-setting actions to the sync.
+- Stop safely if the page structure changes, a login challenge appears, expected totals disappear, or the extracted figures fail validation.
+- Save a timestamped snapshot, source page, account type, currency, and reconciliation result for every sync.
+
+### 4. Reconcile before replacing portfolio data
+
+- Compare Sarwa holdings with Kestrel’s previous snapshot, current market prices, and the latest downloaded statement.
+- Show additions, removals, share-count changes, cost-basis changes, cash movements, and unexplained differences before updating the main dashboard.
+- Never silently remove a holding. Keep the last known-good portfolio and an automatic backup so a failed scrape cannot overwrite real data.
+- Display connection health in plain English: last successful sync, source, account coverage, holdings found, and any figures needing review.
+
+### 5. Unlock true portfolio performance
+
+- Use dated trades, deposits, withdrawals, dividends, fees, and cash to calculate Luke’s actual account performance rather than assuming today’s holdings existed for the full period.
+- Add time-weighted return for investment performance and money-weighted return for Luke’s personal outcome.
+- Compare the real portfolio with SPY and later with suitable international benchmarks over matching dates.
+- Keep Sarwa-reported performance beside Kestrel’s calculation and flag material disagreements.
 
 ## 1. Trust and verification
 
@@ -31,12 +121,17 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 
 ## 2. Valuation and price history
 
+- ✅ Rank owned companies in a research league table using MSCI's published Core Multiple-Factor structure, with visible analyst agreement, value, quality, results, trend, source coverage, and portfolio weight.
+- ✅ Insert qualified unowned opportunities into the league table and flag material stock-weight mismatches against a neutral diversified allocation.
+- ✅ Add one-year daily-return correlation, annualized covariance, portfolio-risk contribution, and an explicit country-neutral US/global opportunity audit.
+- ✅ Replace the fixed watchlist as the sole idea source with direct SEC 13F discovery across eight long-term managers. Show new and increased positions, independent agreement, disclosed portfolio conviction, filing dates and the 45-day reporting limitation; every idea must still pass Kestrel's separate company checks.
 - Use the P/E ratio alongside forward P/E, free-cash-flow yield, debt, growth, margins, and return on capital.
 - Apply valuation measures that suit the business: price-to-book and return on equity for banks, FFO for property companies, normalized earnings for cyclical companies, and cash-flow or unit economics for growth companies.
 - Produce conservative, base, and optimistic fair-value ranges instead of one deceptively precise target.
 - Add an interactive price-history graph for every holding and opportunity with `1D`, `1W`, `1M`, `1Y`, `5Y`, and `All` ranges.
 - Use intraday data for `1D`, adjusted historical prices for longer periods, and clearly state when the available history is limited.
 - Include an exact-value tooltip, percentage change for the selected period, earnings markers, and a benchmark comparison where useful.
+- Compare each holding and today’s portfolio with the S&P 500 across 1 month, 1 year, and 5 years, clearly separating this from personal account returns.
 - Later add a portfolio-level performance graph against a suitable benchmark, with deposits and withdrawals separated from investment returns.
 
 ## 3. Analyst, filing, and event intelligence
@@ -50,7 +145,7 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 
 ## 4. Opportunity and portfolio intelligence
 
-- Expand the opportunity radar beyond a fixed watchlist while keeping minimum quality and liquidity standards.
+- 🚧 Expand the opportunity radar beyond a fixed watchlist while keeping minimum quality and liquidity standards. Direct 13F discovery is connected for US-listed long positions; broader global screens, insider buying and local-market filings remain next.
 - Compare every opportunity with the portfolio's weakest holding, not only with other unowned stocks.
 - Explain when a replacement could improve expected return, diversification, quality, or downside protection.
 - Measure concentration by company, sector, country, currency, and investment theme.
@@ -90,10 +185,9 @@ Kestrel should never present certainty that the evidence does not justify, and i
 
 ## Recommended build order
 
-1. Official filing verification, source dates, and conflict checks.
-2. Reliable historical-price service and the six-range graph.
-3. Sector-aware valuation and fair-value ranges.
-4. Thesis tracking plus analyst-estimate revisions.
-5. Opportunity-versus-holding comparisons and portfolio risk.
-6. Historical signal evaluation and confidence calibration.
-7. International markets, one verified source set at a time.
+1. Mission profile and written investment policy constraints.
+2. Global investable-universe and evidence-quality filters.
+3. Correlation, drawdown, and stress-test engine.
+4. Selection-agnostic Ideal Portfolio with target weights and ranges.
+5. Current-versus-Ideal gap and cost-aware transition plan.
+6. International markets, one verified source set at a time.
