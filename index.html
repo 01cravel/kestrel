@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f5f7">
+  <title>Kestrel — Your daily investment view</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to your portfolio</a>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Kestrel home">
+      <span class="brand-mark" aria-hidden="true">K</span>
+      <span>
+        <strong>Kestrel</strong>
+        <small>Your investment view</small>
+      </span>
+    </a>
+
+    <div class="topbar-actions">
+      <div class="data-state" id="dataState" role="status" aria-live="polite">
+        <span class="state-dot is-loading" id="stateDot"></span>
+        <span id="stateText">Preparing your assessment</span>
+      </div>
+      <button class="button button-quiet" id="editHoldingsButton" type="button">Edit holdings</button>
+      <button class="button button-dark" id="refreshButton" type="button">Refresh evidence</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="morning-brief" aria-labelledby="briefTitle">
+      <div class="brief-date">
+        <span id="todayLabel">Today</span>
+        <strong id="todayDate">—</strong>
+      </div>
+      <div class="brief-copy">
+        <p class="eyebrow">Your daily answer</p>
+        <h1 id="briefTitle">Building your first evidence baseline.</h1>
+        <p id="briefDetail">Holdings appear as their price, company figures and analyst evidence arrive.</p>
+      </div>
+      <dl class="brief-counts" aria-label="Portfolio action counts">
+        <div><dt>Act now</dt><dd id="actNowCount">—</dd></div>
+        <div><dt>Keep</dt><dd id="holdCount">—</dd></div>
+        <div><dt>New ideas</dt><dd id="ideaCount">—</dd></div>
+      </dl>
+    </section>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-copy"><span id="progressText">Starting research</span><span id="progressNumber">0%</span></div>
+      <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+    </div>
+
+    <section class="sarwa-strip" id="sarwaSection" aria-labelledby="sarwaTitle">
+      <div class="sarwa-mark" aria-hidden="true">S</div>
+      <div class="sarwa-copy">
+        <p class="eyebrow">Portfolio connection</p>
+        <h2 id="sarwaTitle">Preparing the Sarwa link</h2>
+        <p id="sarwaDetail">Your private portfolio remains in place while Kestrel checks the connection.</p>
+      </div>
+      <dl class="sarwa-facts" aria-label="Sarwa connection status">
+        <div><dt>Status</dt><dd id="sarwaStatus">Checking</dd></div>
+        <div><dt>Last sync</dt><dd id="sarwaLastSync">—</dd></div>
+        <div><dt>Coverage</dt><dd id="sarwaCoverage">21 local holdings</dd></div>
+      </dl>
+      <div class="sarwa-actions">
+        <a class="button button-quiet" href="https://www.sarwa.co/en" target="_blank" rel="noopener noreferrer">Open Sarwa</a>
+        <button class="button button-dark" id="sarwaReviewButton" type="button" hidden>Review changes</button>
+        <small>Read-only · no trades or transfers</small>
+      </div>
+    </section>
+
+    <section class="mission-card" aria-labelledby="missionTitle">
+      <div class="mission-copy">
+        <p class="eyebrow">Your investment mandate</p>
+        <h2 id="missionTitle">Build maximum long-term wealth. Let the best evidence win.</h2>
+        <p>Kestrel will search globally without favouring any sector, build the ideal portfolio first, and compare your current holdings with that answer afterwards.</p>
+      </div>
+      <div class="mission-risk">
+        <div class="mission-risk-heading"><span>Growth risk</span><strong>8/10</strong></div>
+        <div class="risk-scale" role="img" aria-label="Target risk: 8 out of 10">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="is-off"></i><i class="is-off"></i>
+        </div>
+        <small>Aggressive. Deep temporary falls are acceptable; avoid risks that add no expected reward.</small>
+      </div>
+      <dl class="mission-rules" aria-label="Portfolio mission rules">
+        <div><dt>Objective</dt><dd>Maximum long-term wealth</dd></div>
+        <div><dt>Horizon</dt><dd>Open-ended</dd></div>
+        <div><dt>Universe</dt><dd>US and global · no country or sector bias</dd></div>
+      </dl>
+    </section>
+
+    <section class="evidence-strip" id="evidenceSection" aria-labelledby="evidenceTitle" data-status="guarded">
+      <div class="evidence-mark" aria-hidden="true">T1</div>
+      <div class="evidence-copy">
+        <p class="eyebrow">Source-of-truth standard</p>
+        <h2 id="evidenceTitle">Checking what Kestrel can prove</h2>
+        <p id="evidenceSummary">Official facts must outrank opinions and model estimates.</p>
+      </div>
+      <dl class="evidence-facts" aria-label="Evidence readiness">
+        <div><dt>Authoritative areas</dt><dd id="evidenceAuthority">—</dd></div>
+        <div><dt>Confidence ceiling</dt><dd id="evidenceCap">—</dd></div>
+        <div><dt>Ultra Buy</dt><dd id="evidenceUltra">Locked</dd></div>
+      </dl>
+      <div class="evidence-action">
+        <button class="button button-quiet" id="evidencePolicyButton" type="button">See evidence standard</button>
+        <small id="evidenceNext">Building the verified source layer.</small>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="changesTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What changed</p>
+          <h2 id="changesTitle">Changes that deserve your attention</h2>
+        </div>
+        <p>Only meaningful changes appear here.</p>
+      </div>
+      <div class="change-list" id="changesList">
+        <div class="empty-card">
+          <strong>Establishing your starting point</strong>
+          <span>Once the baseline is saved, Kestrel will call out rating changes here.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="holdingsTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What you own</p>
+          <h2 id="holdingsTitle">Your holdings league table</h2>
+        </div>
+        <p id="portfolioValue">Waiting for current prices</p>
+      </div>
+
+      <div class="league-explainer">
+        <div><strong>Best decision evidence first</strong><span>The large number is the research score plus 10% of any SEC investor-conviction score above neutral—a maximum five-point lift. Weak evidence can never be promoted into a Buy. US and international companies compete on identical rules.</span></div>
+        <p><strong>Read this carefully:</strong> The smaller research score remains the value, quality and momentum result. Weight flags include one-year correlation and covariance. Both are review prompts, not trade instructions.</p>
+      </div>
+
+      <div class="assessment-list" id="holdingsList" aria-live="polite"></div>
+    </section>
+
+    <section class="section benchmark-section" id="benchmarkSection" aria-labelledby="benchmarkTitle" hidden>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Against the market</p>
+          <h2 id="benchmarkTitle">Are your holdings earning their place?</h2>
+        </div>
+        <p id="benchmarkSummary">Comparing today’s holdings with the S&amp;P 500.</p>
+      </div>
+      <div class="benchmark-grid" id="benchmarkGrid" aria-live="polite"></div>
+      <p class="benchmark-note" id="benchmarkNote">A like-for-like view of today’s holdings—not your personal account return.</p>
+    </section>
+
+    <section class="section portfolio-shape" id="portfolioRiskSection" aria-labelledby="portfolioRiskTitle" hidden>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Risk before return</p>
+          <h2 id="portfolioRiskTitle">The shape of your portfolio</h2>
+        </div>
+        <p id="portfolioRiskSummary">Checking where risk is concentrated.</p>
+      </div>
+      <div class="portfolio-risk-grid" id="portfolioRiskGrid"></div>
+    </section>
+
+    <section class="section filing-section" id="superinvestorSection" aria-labelledby="superinvestorTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Direct from SEC filings</p>
+          <h2 id="superinvestorTitle">What experienced investors are buying</h2>
+        </div>
+        <p id="superinvestorSummary">Reading disclosed portfolios and checking every idea independently.</p>
+      </div>
+      <div class="filing-rule" role="note">
+        <strong>Idea source, not a Buy signal</strong>
+        <span id="superinvestorPeriod">13F filings show past quarter-end positions and can arrive up to 45 days later.</span>
+        <span class="filing-rule-links"><a href="https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets" target="_blank" rel="noopener noreferrer">SEC source</a><a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1364827" target="_blank" rel="noopener noreferrer">Conviction research</a></span>
+      </div>
+      <div class="filing-grid" id="superinvestorList" aria-live="polite">
+        <div class="empty-card wide"><strong>Reading manager filings</strong><span>New purchases and high-conviction positions will appear after their identities are verified.</span></div>
+      </div>
+    </section>
+
+    <section class="section opportunity-section" aria-labelledby="opportunitiesTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What you may be missing</p>
+          <h2 id="opportunitiesTitle">Strong opportunities you do not own</h2>
+        </div>
+        <p>A short list, ranked by evidence—not popularity.</p>
+      </div>
+
+      <div class="opportunity-grid" id="opportunitiesList" aria-live="polite">
+        <div class="empty-card wide">
+          <strong>Checking the opportunity list</strong>
+          <span>Holdings are assessed first. New ideas will follow.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section calibration-section" aria-labelledby="calibrationTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Measured, not assumed</p>
+          <h2 id="calibrationTitle">Kestrel’s track record</h2>
+        </div>
+        <p id="calibrationSummary">Starting the point-in-time signal journal.</p>
+      </div>
+      <div class="calibration-grid" id="calibrationGrid">
+        <div class="empty-card wide"><strong>Building the baseline</strong><span>Daily signals will be checked against what happened later.</span></div>
+      </div>
+    </section>
+
+    <section class="guardrail" aria-labelledby="guardrailTitle">
+      <div>
+        <p class="eyebrow">Important guardrail</p>
+        <h2 id="guardrailTitle">A strong rating is not a promise.</h2>
+      </div>
+      <p>Kestrel separates attractiveness from confidence. “Ultra Buy” stays locked until official filings, institutional pricing, validated corporate actions, point-in-time estimates and whole-portfolio risk checks all agree.</p>
+    </section>
+  </main>
+
+  <footer>
+    <span>Kestrel is decision support for a long-term portfolio.</span>
+    <button class="text-button" id="methodButton" type="button">How ratings work</button>
+  </footer>
+
+  <dialog id="detailDialog" class="dialog">
+    <div class="dialog-shell">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close details">×</button>
+      <div id="detailContent"></div>
+    </div>
+  </dialog>
+
+  <dialog id="holdingsDialog" class="dialog">
+    <form class="dialog-shell holdings-form" id="holdingsForm" method="dialog">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close holdings editor">×</button>
+      <p class="eyebrow">Portfolio setup</p>
+      <h2>Edit your holdings</h2>
+      <p class="dialog-intro">Shares calculate position size. Average cost is optional and only used to show your gain or loss.</p>
+      <div class="holdings-form-head" aria-hidden="true"><span>Company</span><span>Shares</span><span>Average cost</span></div>
+      <div id="holdingsFields"></div>
+      <div class="form-actions">
+        <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
+        <button class="button button-dark" type="submit">Save holdings</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="methodDialog" class="dialog">
+    <div class="dialog-shell method-copy">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close methodology">×</button>
+      <p class="eyebrow">Plain-English method</p>
+      <h2>How Kestrel reaches a view</h2>
+      <div class="method-grid">
+        <div><strong>Research score</strong><span>A relative rank built from equal parts value, quality and momentum, following MSCI’s published Core Multiple-Factor structure.</span></div>
+        <div><strong>Decision score</strong><span>The research score plus a capped zero-to-five point SEC filing adjustment based on fresh buying, independent manager agreement and disclosed portfolio concentration. It never changes the Buy confidence gate.</span></div>
+        <div><strong>Business health</strong><span>Are sales, profits and returns healthy?</span></div>
+        <div><strong>Price</strong><span>Does today’s price look sensible against earnings and growth?</span></div>
+        <div><strong>Direction</strong><span>Is the company improving or weakening?</span></div>
+        <div><strong>Analysts</strong><span>Are credible analysts broadly positive, and is their view changing?</span></div>
+        <div><strong>Risk</strong><span>Could debt, volatility or concentration make this unsafe for your portfolio?</span></div>
+        <div><strong>Confidence</strong><span>Is the evidence complete, current and independently checked?</span></div>
+      </div>
+      <p class="method-note">The league score ranks research evidence; it does not predict the chance of profit. Analyst agreement is shown, while revisions and earnings surprises drive the sentiment factor. Hold is the normal answer. Missing evidence never counts as positive evidence.</p>
+    </div>
+  </dialog>
+
+  <dialog id="evidenceDialog" class="dialog">
+    <div class="dialog-shell method-copy evidence-method">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close evidence standard">×</button>
+      <p class="eyebrow">Evidence before confidence</p>
+      <h2>Kestrel’s source hierarchy</h2>
+      <p class="dialog-intro">Every important number must keep its source, period, unit, currency and retrieval time. A model can transform evidence, but it cannot promote its own answer into a fact.</p>
+      <div class="truth-tier-list">
+        <div><strong>Tier 1 · Authoritative</strong><span>Sarwa records, regulator filings, exchanges, issuers, central banks and government agencies establish facts.</span></div>
+        <div><strong>Tier 2 · Institutional</strong><span>Licensed pricing, corporate actions, estimates and risk data validate and standardise those facts.</span></div>
+        <div><strong>Tier 3 · Provisional</strong><span>Finnhub, FMP and Yahoo help with an early view, but cannot support the highest confidence by themselves.</span></div>
+        <div><strong>Tier 4 · Experimental</strong><span>Alternative data and model outputs can support research but never establish a fact alone.</span></div>
+      </div>
+      <p class="method-note">Missing evidence never counts as positive evidence. Conflicts lower confidence automatically.</p>
+      <a class="button button-dark evidence-policy-link" href="/SOURCE_POLICY.md" target="_blank" rel="noopener">Open the full source policy</a>
+    </div>
+  </dialog>
+
+  <dialog id="sarwaDialog" class="dialog">
+    <div class="dialog-shell sarwa-review">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="Close Sarwa review">×</button>
+      <p class="eyebrow">Sarwa reconciliation</p>
+      <h2>Review before Kestrel updates</h2>
+      <p class="dialog-intro">Nothing changes until these figures have been checked.</p>
+      <div id="sarwaReviewContent"></div>
+      <div class="form-actions">
+        <button class="button button-quiet" id="sarwaDiscardButton" type="button">Discard snapshot</button>
+        <button class="button button-dark" id="sarwaApplyButton" type="button">Apply verified changes</button>
+      </div>
+    </div>
+  </dialog>
+
+  <template id="loadingRowTemplate">
+    <article class="assessment-row is-loading-row">
+      <div class="loading-block loading-action"></div>
+      <div class="loading-block"></div>
+      <div class="loading-block"></div>
+    </article>
+  </template>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
