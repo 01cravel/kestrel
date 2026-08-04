@@ -4148,3 +4148,29 @@ footer {
   font-size: 12px;
   line-height: 1.5;
 }
+
+.shadow-tiers {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.shadow-tiers div {
+  padding: 6px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  text-align: center;
+}
+
+.shadow-tiers dt {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.shadow-tiers dd {
+  margin: 2px 0 0;
+  font-family: var(--display);
+  font-size: 15px;
+}

@@ -100,6 +100,22 @@ class RadarTests(unittest.TestCase):
         for row in result["candidates"]:
             self.assertNotIn("direction", row)
 
+    def test_the_ladder_falls_as_the_bar_rises(self) -> None:
+        _archive(self.database, {"WILD": 0.06, "CALM": 0.001})
+        result = build_candidates(self.database, today=dt.date(2026, 1, 5))
+        self.assertEqual(result["tierLabels"], ["3", "5", "7.5", "10"])
+        for row in result["candidates"]:
+            ladder = [row["tiers"][label] for label in result["tierLabels"]]
+            self.assertEqual(ladder, sorted(ladder, reverse=True))
+            for value in ladder:
+                self.assertGreaterEqual(value, 0.0)
+                self.assertLessEqual(value, 1.0)
+
+    def test_the_headline_matches_the_ten_percent_tier(self) -> None:
+        _archive(self.database, {"WILD": 0.06})
+        for row in build_candidates(self.database, today=dt.date(2026, 1, 5))["candidates"]:
+            self.assertEqual(row["jumpChance10"], row["tiers"]["10"])
+
     def test_the_headline_is_described_as_a_measured_rate(self) -> None:
         _archive(self.database, {"WILD": 0.06})
         result = build_candidates(self.database, today=dt.date(2026, 1, 5))

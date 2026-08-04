@@ -32,7 +32,10 @@ from swing_radar_policy import INVESTABLE_SECURITY_TYPES, POLICY_VERSION
 
 
 RADAR_VERSION = "2026.08.1"
-JUMP_THRESHOLD = 0.10          # benchmark-relative move that counts as a jump
+JUMP_THRESHOLD = 0.10          # the headline "sharp move" threshold
+# A ten percent week is rare, so most shares would show a low number and little
+# to choose between them. The ladder shows how the chance rises as the bar falls.
+JUMP_TIERS = (0.03, 0.05, 0.075, 0.10)
 HORIZON_SESSIONS = 5           # one trading week
 LOOKBACK_SESSIONS = 252
 VOLATILITY_WINDOW = 21
@@ -57,15 +60,28 @@ def _series(connection: sqlite3.Connection, ticker: str) -> List[Tuple[str, floa
     ]
 
 
-def _forward_jump(series: Sequence[Tuple[str, float, float, Optional[float]]],
-                  index: int) -> Optional[bool]:
-    """Did the five sessions after ``index`` deliver a ten percent relative move?"""
+def _forward_move(series: Sequence[Tuple[str, float, float, Optional[float]]],
+                  index: int) -> Optional[float]:
+    """Absolute benchmark-relative move over the five sessions after ``index``."""
     exit_index = index + HORIZON_SESSIONS
     if exit_index >= len(series):
         return None
     stock = series[exit_index][1] / series[index][1] - 1
     benchmark = series[exit_index][2] / series[index][2] - 1
-    return abs(stock - benchmark) >= JUMP_THRESHOLD
+    return abs(stock - benchmark)
+
+
+def tier_key(tier: float) -> str:
+    """Stable label for a tier, e.g. 0.075 -> '7.5'."""
+    scaled = tier * 100
+    return str(int(scaled)) if scaled == int(scaled) else str(scaled)
+
+
+def _forward_jump(series: Sequence[Tuple[str, float, float, Optional[float]]],
+                  index: int) -> Optional[bool]:
+    """Whether the headline threshold was crossed."""
+    move = _forward_move(series, index)
+    return None if move is None else move >= JUMP_THRESHOLD
 
 
 def _volatility(series: Sequence[Tuple[str, float, float, Optional[float]]],
@@ -163,12 +179,16 @@ class RadarArchive:
                 bucket = _volatility_bucket(statistics.pstdev(window) * math.sqrt(252))
                 dates = {series[step][0] for step in range(index + 1, index + HORIZON_SESSIONS + 1)}
                 results_due = bool(dates & announcements)
-                outcome = _forward_jump(series, index)
-                if outcome is None:
+                move = _forward_move(series, index)
+                if move is None:
                     continue
-                counts = tally.setdefault((results_due, bucket), [0, 0])
+                counts = tally.setdefault(
+                    (results_due, bucket), [0] + [0] * len(JUMP_TIERS)
+                )
                 counts[0] += 1
-                counts[1] += 1 if outcome else 0
+                for position, tier in enumerate(JUMP_TIERS, 1):
+                    if move >= tier:
+                        counts[position] += 1
         self._cohorts = tally
 
     def cohort_rate(self, *, results_due: bool, bucket: str) -> Dict[str, Any]:
@@ -178,12 +198,22 @@ class RadarArchive:
         inside the following week — exactly the situation a candidate is in.
         """
         self._build_cohorts()
-        matches, jumps = (self._cohorts or {}).get((results_due, bucket), (0, 0))
+        counts = (self._cohorts or {}).get((results_due, bucket))
+        if not counts:
+            return {"cohortSessions": 0, "jumps": 0, "rate": None, "tiers": {},
+                    "sufficient": False, "definition": ""}
+        matches = counts[0]
+        tiers = {
+            tier_key(tier): (round(counts[position] / matches, 4) if matches else None)
+            for position, tier in enumerate(JUMP_TIERS, 1)
+        }
+        jumps = counts[JUMP_TIERS.index(JUMP_THRESHOLD) + 1]
         rate = (jumps / matches) if matches else None
         return {
             "cohortSessions": matches,
             "jumps": jumps,
             "rate": round(rate, 4) if rate is not None else None,
+            "tiers": tiers,
             "sufficient": matches >= MIN_COHORT,
             "definition": (
                 f"Sessions in the {bucket} volatility band with"
@@ -195,17 +225,39 @@ class RadarArchive:
         """How often this security itself has jumped, over the last year."""
         series = self.series.get(ticker) or []
         window = series[-(LOOKBACK_SESSIONS + HORIZON_SESSIONS):]
-        outcomes = [
-            _forward_jump(window, index) for index in range(len(window) - HORIZON_SESSIONS)
+        moves = [
+            _forward_move(window, index) for index in range(len(window) - HORIZON_SESSIONS)
         ]
-        usable = [outcome for outcome in outcomes if outcome is not None]
+        usable = [move for move in moves if move is not None]
         if not usable:
-            return {"sessions": 0, "jumps": 0, "rate": None}
+            return {"sessions": 0, "jumps": 0, "rate": None, "tiers": {}}
+        tiers = {
+            tier_key(tier): round(sum(1 for move in usable if move >= tier) / len(usable), 4)
+            for tier in JUMP_TIERS
+        }
         return {
             "sessions": len(usable),
-            "jumps": sum(usable),
-            "rate": round(sum(usable) / len(usable), 4),
+            "jumps": sum(1 for move in usable if move >= JUMP_THRESHOLD),
+            "rate": tiers[tier_key(JUMP_THRESHOLD)],
+            "tiers": tiers,
         }
+
+
+def _blend_tiers(cohort: Dict[str, Any], own: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """Blend cohort and own-record at every tier, with one shared weighting."""
+    weight = min(0.5, own.get("sessions", 0) / (own.get("sessions", 0) + 250)) if own.get("sessions") else 0.0
+    blended: Dict[str, Optional[float]] = {}
+    for tier in JUMP_TIERS:
+        key = tier_key(tier)
+        cohort_rate = (cohort.get("tiers") or {}).get(key)
+        own_rate = (own.get("tiers") or {}).get(key)
+        if cohort_rate is None:
+            blended[key] = own_rate
+        elif own_rate is None:
+            blended[key] = cohort_rate
+        else:
+            blended[key] = round(cohort_rate * (1 - weight) + own_rate * weight, 4)
+    return blended
 
 
 def _blend(cohort: Dict[str, Any], own: Dict[str, Any]) -> Optional[float]:
@@ -258,13 +310,15 @@ def build_candidates(database: Path = DEFAULT_DATABASE,
             cohort_cache[key] = archive.cohort_rate(results_due=results_due, bucket=bucket)
         cohort = cohort_cache[key]
         own = archive.own_jump_rate(ticker)
-        chance = _blend(cohort, own)
+        tiers = _blend_tiers(cohort, own)
+        chance = tiers.get(tier_key(JUMP_THRESHOLD))
         if chance is None:
             continue
         rows.append({
             "symbol": ticker,
             "asOf": series[index][0],
             "jumpChance10": chance,
+            "tiers": tiers,
             "cohort": cohort,
             "ownRecord": own,
             "annualisedVolatility": round(volatility, 3) if volatility else None,
@@ -291,6 +345,12 @@ def build_candidates(database: Path = DEFAULT_DATABASE,
         "securitiesConsidered": len(rows),
         "candidates": shortlist[:DISPLAY],
         "target": f"A benchmark-relative move of {int(JUMP_THRESHOLD * 100)}% or more within one trading week.",
+        "tierLabels": [tier_key(tier) for tier in JUMP_TIERS],
+        "tierNote": (
+            "Each tier is the measured chance of a move of at least that size, in either "
+            "direction, within one trading week. Smaller moves are commoner, so the ladder "
+            "always falls as the bar rises."
+        ),
         "chanceMethod": (
             "A measured base rate, not a prediction. Every archived session in the same "
             "volatility band and the same scheduled-results state is counted, and the share "

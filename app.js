@@ -1732,11 +1732,11 @@ function renderSwingWatchlist(payload) {
       </div>
       <aside>
         <div class="shadow-jump-chance"><strong>${plainPercent((candidate.jumpChance10 || 0) * 100, 0)}</strong><span>measured chance of a 10%+ move either way</span></div>
+        <div class="shadow-tiers">
+          ${(payload.tierLabels || []).map(label => `
+            <div><dt>${escapeHtml(label)}%+</dt><dd>${plainPercent(((candidate.tiers || {})[label] || 0) * 100, 0)}</dd></div>`).join('')}
+        </div>
         <strong>Not stated</strong><small>direction</small>
-        <dl>
-          <div><dt>Volatility</dt><dd>${escapeHtml(candidate.annualisedVolatility ?? '—')}</dd></div>
-          <div><dt>Volume build</dt><dd>${escapeHtml(candidate.volumeBuild ?? '—')}</dd></div>
-        </dl>
       </aside>
     </article>`;
   }).join('');

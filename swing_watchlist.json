@@ -10,13 +10,25 @@
         "definition": "Sessions in the wild volatility band with scheduled results in the next week.",
         "jumps": 467,
         "rate": 0.4427,
-        "sufficient": true
+        "sufficient": true,
+        "tiers": {
+          "10": 0.4427,
+          "3": 0.8104,
+          "5": 0.6806,
+          "7.5": 0.5498
+        }
       },
       "jumpChance10": 0.4753,
       "ownRecord": {
         "jumps": 128,
         "rate": 0.5079,
-        "sessions": 252
+        "sessions": 252,
+        "tiers": {
+          "10": 0.5079,
+          "3": 0.8373,
+          "5": 0.7262,
+          "7.5": 0.6111
+        }
       },
       "rank": 1,
       "reactionHistory": {
@@ -73,6 +85,12 @@
         "2026-08-08"
       ],
       "symbol": "AAOI",
+      "tiers": {
+        "10": 0.4753,
+        "3": 0.8238,
+        "5": 0.7034,
+        "7.5": 0.5804
+      },
       "volatilityBand": "wild",
       "volumeBuild": 0.52
     },
@@ -85,13 +103,25 @@
         "definition": "Sessions in the wild volatility band with no scheduled results in the next week.",
         "jumps": 5922,
         "rate": 0.3468,
-        "sufficient": true
+        "sufficient": true,
+        "tiers": {
+          "10": 0.3468,
+          "3": 0.7574,
+          "5": 0.614,
+          "7.5": 0.466
+        }
       },
       "jumpChance10": 0.4392,
       "ownRecord": {
         "jumps": 134,
         "rate": 0.5317,
-        "sessions": 252
+        "sessions": 252,
+        "tiers": {
+          "10": 0.5317,
+          "3": 0.873,
+          "5": 0.7698,
+          "7.5": 0.6587
+        }
       },
       "rank": 2,
       "reactionHistory": {
@@ -133,6 +163,12 @@
       "resultsPrecision": null,
       "resultsWindow": null,
       "symbol": "SNDK",
+      "tiers": {
+        "10": 0.4392,
+        "3": 0.8152,
+        "5": 0.6919,
+        "7.5": 0.5624
+      },
       "volatilityBand": "wild",
       "volumeBuild": 1.169
     },
@@ -145,13 +181,25 @@
         "definition": "Sessions in the wild volatility band with scheduled results in the next week.",
         "jumps": 467,
         "rate": 0.4427,
-        "sufficient": true
+        "sufficient": true,
+        "tiers": {
+          "10": 0.4427,
+          "3": 0.8104,
+          "5": 0.6806,
+          "7.5": 0.5498
+        }
       },
       "jumpChance10": 0.4376,
       "ownRecord": {
         "jumps": 109,
         "rate": 0.4325,
-        "sessions": 252
+        "sessions": 252,
+        "tiers": {
+          "10": 0.4325,
+          "3": 0.7897,
+          "5": 0.6865,
+          "7.5": 0.5238
+        }
       },
       "rank": 3,
       "reactionHistory": {
@@ -208,6 +256,12 @@
         "2026-08-10"
       ],
       "symbol": "ALAB",
+      "tiers": {
+        "10": 0.4376,
+        "3": 0.8,
+        "5": 0.6835,
+        "7.5": 0.5368
+      },
       "volatilityBand": "wild",
       "volumeBuild": 0.697
     },
@@ -220,13 +274,25 @@
         "definition": "Sessions in the wild volatility band with no scheduled results in the next week.",
         "jumps": 5922,
         "rate": 0.3468,
-        "sufficient": true
+        "sufficient": true,
+        "tiers": {
+          "10": 0.3468,
+          "3": 0.7574,
+          "5": 0.614,
+          "7.5": 0.466
+        }
       },
       "jumpChance10": 0.4373,
       "ownRecord": {
         "jumps": 133,
         "rate": 0.5278,
-        "sessions": 252
+        "sessions": 252,
+        "tiers": {
+          "10": 0.5278,
+          "3": 0.881,
+          "5": 0.7659,
+          "7.5": 0.6429
+        }
       },
       "rank": 4,
       "reactionHistory": {
@@ -299,6 +365,12 @@
         "2026-10-03"
       ],
       "symbol": "ASTS",
+      "tiers": {
+        "10": 0.4373,
+        "3": 0.8192,
+        "5": 0.69,
+        "7.5": 0.5544
+      },
       "volatilityBand": "wild",
       "volumeBuild": 0.488
     },
@@ -311,13 +383,25 @@
         "definition": "Sessions in the wild volatility band with scheduled results in the next week.",
         "jumps": 467,
         "rate": 0.4427,
-        "sufficient": true
+        "sufficient": true,
+        "tiers": {
+          "10": 0.4427,
+          "3": 0.8104,
+          "5": 0.6806,
+          "7.5": 0.5498
+        }
       },
       "jumpChance10": 0.4336,
       "ownRecord": {
         "jumps": 107,
         "rate": 0.4246,
-        "sessions": 252
+        "sessions": 252,
+        "tiers": {
+          "10": 0.4246,
+          "3": 0.7857,
+          "5": 0.6746,
+          "7.5": 0.5238
+        }
       },
       "rank": 5,
       "reactionHistory": {
@@ -374,18 +458,31 @@
         "2026-08-23"
       ],
       "symbol": "CLSK",
+      "tiers": {
+        "10": 0.4336,
+        "3": 0.798,
+        "5": 0.6776,
+        "7.5": 0.5368
+      },
       "volatilityBand": "wild",
       "volumeBuild": 0.918
     }
   ],
   "chanceMethod": "A measured base rate, not a prediction. Every archived session in the same volatility band and the same scheduled-results state is counted, and the share that produced the move is reported, blended with this security's own record.",
   "directionPolicy": "No direction is stated. Kestrel can measure how often a security moves sharply; which way it moves at a scheduled announcement is not knowable in advance.",
-  "frozenAt": "2026-08-04T19:10:09Z",
+  "frozenAt": "2026-08-04T19:23:22Z",
   "policyVersion": "2026.08.02.1",
   "radarVersion": "2026.08.1",
   "securitiesConsidered": 944,
   "status": "ready",
   "target": "A benchmark-relative move of 10% or more within one trading week.",
+  "tierLabels": [
+    "3",
+    "5",
+    "7.5",
+    "10"
+  ],
+  "tierNote": "Each tier is the measured chance of a move of at least that size, in either direction, within one trading week. Smaller moves are commoner, so the ladder always falls as the bar rises.",
   "title": "Could move sharply this week",
   "weekEnding": "2026-08-07"
 }
