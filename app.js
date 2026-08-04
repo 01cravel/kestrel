@@ -239,6 +239,8 @@ const state = {
   portfolioRiskRequest: null,
   detailPerformanceRequest: null,
   sarwa: null,
+  movers: null,
+  swingWatchlist: null,
 };
 
 const els = {
@@ -257,6 +259,11 @@ const els = {
   progressNumber: document.getElementById('progressNumber'),
   progressBar: document.getElementById('progressBar'),
   changesList: document.getElementById('changesList'),
+  moversSummary: document.getElementById('moversSummary'),
+  moversList: document.getElementById('moversList'),
+  shadowWatchSummary: document.getElementById('shadowWatchSummary'),
+  shadowLearnings: document.getElementById('shadowLearnings'),
+  shadowWatchList: document.getElementById('shadowWatchList'),
   holdingsList: document.getElementById('holdingsList'),
   opportunitiesList: document.getElementById('opportunitiesList'),
   superinvestorSection: document.getElementById('superinvestorSection'),
@@ -1589,6 +1596,155 @@ async function fetchDashboard() {
   } catch (error) {
     showConnectionError(error);
     schedulePoll(5000);
+  }
+}
+
+function moverPercent(value, digits = 1) {
+  if (!Number.isFinite(number(value))) return '—';
+  const percentage = number(value) * 100;
+  return `${percentage > 0 ? '+' : ''}${percentage.toFixed(digits)}%`;
+}
+
+function moverDate(value) {
+  if (!value) return 'date unavailable';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function renderMovers(payload) {
+  if (!els.moversList || !els.moversSummary) return;
+  const movers = Array.isArray(payload?.movers) ? payload.movers : [];
+  if (!movers.length) {
+    els.moversSummary.textContent = payload?.message || 'Mover evidence is not ready yet.';
+    els.moversList.innerHTML = `<div class="empty-card wide"><strong>No verified mover set yet</strong><span>${escapeHtml(payload?.message || 'The market archive is still being prepared.')}</span></div>`;
+    return;
+  }
+  els.moversSummary.textContent = `${moverDate(payload.asOf)} · S&P 500 ${moverPercent(payload.marketReturn)} · ${movers.length} liquid common shares reviewed`;
+  els.moversList.innerHTML = movers.map(mover => {
+    const volume = Number.isFinite(number(mover.volumeMultiple))
+      ? `${number(mover.volumeMultiple).toFixed(1)}× normal volume`
+      : 'volume comparison unavailable';
+    const gap = mover.tradingGapWarning
+      ? `<p class="mover-warning">${escapeHtml(mover.tradingGapWarning)}</p>`
+      : '';
+    const causeVerified = mover.cause?.status === 'verified';
+    const causeSources = Array.isArray(mover.cause?.sources) ? mover.cause.sources : [];
+    const sourceLinks = causeVerified
+      ? causeSources.map(source => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.name)}</a>`).join('')
+      : '';
+    const causeDetail = causeVerified
+      ? `<div class="autopsy-known"><strong>What was knowable beforehand</strong><p>${escapeHtml(mover.cause?.knownBefore || '')}</p><strong>What was not knowable</strong><p>${escapeHtml(mover.cause?.unknown || '')}</p></div>`
+      : '';
+    return `
+      <article class="mover-card" data-direction="${escapeHtml(mover.direction || 'unknown')}">
+        <header>
+          <div class="mover-rank"><span>#${escapeHtml(mover.rank)}</span><small>abnormal move</small></div>
+          <div class="mover-company"><strong>${escapeHtml(mover.symbol)}</strong><span>${escapeHtml(mover.name || mover.symbol)}</span></div>
+          <div class="mover-change"><strong>${moverPercent(mover.move)}</strong><span>${moverPercent(mover.relativeMove)} vs market</span></div>
+        </header>
+        <div class="autopsy-rail">
+          <div><span class="autopsy-mark">Move</span><p>The shares moved ${moverPercent(mover.move)} from their last actual close, on ${escapeHtml(volume)}.</p></div>
+          <div><span class="autopsy-mark">Before</span><p>${escapeHtml(mover.preMove?.plainEnglish || 'No dependable advance clue is available yet.')}</p></div>
+          <div><span class="autopsy-mark">Cause</span><div class="autopsy-cause"><p>${escapeHtml(mover.cause?.plainEnglish || 'The cause has not been verified.')}</p>${causeDetail}${sourceLinks ? `<nav class="mover-sources" aria-label="Evidence sources">${sourceLinks}</nav>` : ''}</div></div>
+        </div>
+        ${gap}
+        <footer><span>${causeVerified ? 'Cause verified' : 'Cause not yet verified'} · research only</span><small>${escapeHtml(mover.previousSession || '')} to ${escapeHtml(payload.asOf || '')}</small></footer>
+      </article>`;
+  }).join('');
+}
+
+async function fetchMovers() {
+  try {
+    const response = await fetch('/api/movers', { cache: 'no-store' });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Mover research could not be loaded');
+    state.movers = payload;
+    renderMovers(payload);
+  } catch (error) {
+    if (els.moversSummary) els.moversSummary.textContent = 'Mover research is temporarily unavailable.';
+    if (els.moversList) els.moversList.innerHTML = '<div class="empty-card wide"><strong>Mover research could not load</strong><span>Keep the local data service running, then refresh.</span></div>';
+    console.error(error);
+  }
+}
+
+function eventDate(value) {
+  if (!value) return 'Time unavailable';
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/New_York', timeZoneName: 'short',
+  }).format(new Date(value));
+}
+
+function renderSwingWatchlist(payload) {
+  if (!els.shadowWatchList || !els.shadowWatchSummary) return;
+  const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+  if (!candidates.length) {
+    els.shadowWatchSummary.textContent = payload?.message || 'No prediction list is frozen yet.';
+    els.shadowWatchList.innerHTML = '<div class="empty-card wide"><strong>No shadow list yet</strong><span>Kestrel will not create one after the outcome is known.</span></div>';
+    return;
+  }
+  const learned = payload?.learnedSetup || {};
+  const learnedSignals = Array.isArray(learned.signals) ? learned.signals : [];
+  if (els.shadowLearnings) {
+    els.shadowLearnings.innerHTML = `
+      <div class="shadow-learning lead"><strong>${moverPercent(learned.baseSwingRate, 1)}</strong><span>normal daily chance of a 10% move</span></div>
+      ${learnedSignals.map(signal => `<div class="shadow-learning"><strong>${escapeHtml(signal.headline)}</strong><span>${escapeHtml(signal.plainEnglish)}</span></div>`).join('')}
+      <p>${escapeHtml(learned.warning || '')}</p>`;
+  }
+  els.shadowWatchSummary.textContent = `Frozen 3 Aug · ${candidates.length} names · price history through ${moverDate(payload.priceEvidenceThrough)}`;
+  const signalLabels = {
+    scheduledCatalyst: 'Dated event',
+    repeatMover: 'Moved big before',
+    highVolatility: 'Usually volatile',
+    strongTrend: 'Strong recent move',
+    volumeBuild: 'Volume building',
+  };
+  els.shadowWatchList.innerHTML = candidates.map(candidate => {
+    const setupSignals = candidate.setupSignals || {};
+    const setupChips = Object.entries(signalLabels).map(([key, label]) => `
+      <span class="${setupSignals[key] ? 'pass' : 'miss'}"><b aria-hidden="true">${setupSignals[key] ? '✓' : '–'}</b>${escapeHtml(label)}</span>`).join('');
+    return `
+    <article class="shadow-watch-card">
+      <div class="shadow-watch-rank"><span>${escapeHtml(candidate.rank)}</span><small>watch</small></div>
+      <div class="shadow-watch-main">
+        <header><strong>${escapeHtml(candidate.symbol)}</strong><span>${escapeHtml(candidate.name)}</span></header>
+        <h3>${escapeHtml(candidate.event)}</h3>
+        <p>${escapeHtml(candidate.whyWatch)}</p>
+        <div class="shadow-setup">
+          <div><strong>${escapeHtml(candidate.setupSignalsPassed)} of ${escapeHtml(candidate.setupSignalsTotal)}</strong><span>big-move clues present</span></div>
+          <div class="shadow-signal-chips">${setupChips}</div>
+          <small>This score is about a sharp move either way—not whether the share will rise.</small>
+        </div>
+        <div class="shadow-watch-cases">
+          <p><b>Could make it jump</b>${escapeHtml(candidate.upsideCase)}</p>
+          <p><b>Could make it fall</b>${escapeHtml(candidate.downsideCase)}</p>
+        </div>
+      </div>
+      <aside>
+        <div class="shadow-jump-chance"><strong>${moverPercent(candidate.jumpChance10, 0)}</strong><span>rough chance of rising 10%+</span></div>
+        <strong>${escapeHtml(candidate.direction)}</strong><small>direction</small>
+        <time datetime="${escapeHtml(candidate.eventAt)}">${escapeHtml(eventDate(candidate.eventAt))}</time>
+        <dl>
+          <div><dt>Earnings jumps</dt><dd>${escapeHtml(candidate.earningsJumpsAbove10)} of ${escapeHtml(candidate.earningsEventsMeasured)}</dd></div>
+          <div><dt>Recent month</dt><dd>${moverPercent(candidate.return20d)}</dd></div>
+        </dl>
+        <a href="${escapeHtml(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">Verified event</a>
+      </aside>
+    </article>`;
+  }).join('');
+}
+
+async function fetchSwingWatchlist() {
+  try {
+    const response = await fetch('/api/swing-watchlist', { cache: 'no-store' });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Shadow list could not be loaded');
+    state.swingWatchlist = payload;
+    renderSwingWatchlist(payload);
+  } catch (error) {
+    if (els.shadowWatchSummary) els.shadowWatchSummary.textContent = 'Shadow list is temporarily unavailable.';
+    console.error(error);
   }
 }
 
@@ -2966,6 +3122,8 @@ document.querySelectorAll('dialog').forEach(dialog => {
 async function startKestrel() {
   await syncPortfolioFromServer();
   fetchSarwaStatus();
+  fetchSwingWatchlist();
+  fetchMovers();
   fetchDashboard();
 }
 

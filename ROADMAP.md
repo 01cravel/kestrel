@@ -162,6 +162,33 @@ The aim is to replace manual share counts and costs with a dependable view of th
 - Test proposed scoring changes in shadow mode before they affect live recommendations.
 - Keep scoring changes versioned and reviewable; do not allow an opaque model to retrain itself automatically.
 
+### Daily Mover Autopsy and recursive opportunity learning
+
+Build a separate daily research loop that studies the market's largest genuine rises and falls, including companies Luke did not own. Its purpose is to discover repeatable, investable clues without contaminating the long-term portfolio score with hindsight.
+
+**Foundation status — 2 August 2026:**
+
+- ✅ Phase 1: the investable universe, swing definitions, no-hindsight rules, success measures, alert limits and shadow-to-live safety gates are fixed in a versioned, tested policy.
+- ✅ Phase 2 build: the resumable two-year Massive market-history pipeline, corporate-action handling, SPY-relative labels, validation and audit trail are implemented and tested.
+- ✅ Phase 2 prices: 499 completed US sessions and 5.67 million daily bars are stored locally through 31 July 2026. Point-in-time market value still needs an additional historical source; Kestrel leaves it unknown rather than substituting today's value.
+- ✅ First autopsy screen: liquid common shares are ranked by benchmark-relative move, with pre-move price/volume evidence and strict no-hindsight labels.
+- 🚧 Catalyst evidence: REPL, IESC and RBLX have timestamped official-source explanations for 31 July. Unverified causes remain visibly unverified.
+- 🚧 First forward shadow list: five pre-event predictions were frozen on 3 August for the week ending 7 August. Direction is withheld until a validated model earns the right to state it.
+- 🚧 Each shadow candidate now shows an experimental chance of a 10% benchmark-relative rise, based on its SEC-timestamped earnings reactions and shrunk toward the peer base rate. It remains uncalibrated until the frozen journal matures.
+- ✅ The two-year archive's strongest provisional big-move clues now appear beside every frozen candidate as a separate setup score. Kestrel keeps this distinct from bullish probability and does not multiply overlapping clues into false precision.
+
+1. **Freeze the evidence first.** At each market close, save the top gainers and losers across a liquid, investable global universe together with the price, volume, market value, float, short interest, options-implied move and every source timestamp. Exclude penny-stock distortions, reverse splits, stale prices and untradeable names unless they are shown in a clearly labelled speculative section.
+2. **Explain what happened.** Link each exceptional move to the earliest credible catalyst: regulator decision, trial result, earnings, guidance, takeover, contract, court ruling, filing, macro shock or no verified public explanation. Prefer regulator, exchange, company filing and official-agency sources; preserve competing explanations when causality is uncertain.
+3. **Reconstruct only what was knowable beforehand.** Create a time-stamped pre-event dossier containing the public event calendar, earlier filings, estimate revisions, insider and institutional changes, short interest, unusual options pricing, price/volume behaviour, valuation, balance-sheet survival risk and comparable historical events. Never use a document published after the decision in the pre-event record.
+4. **Separate three questions.** Show whether the event was predictable, whether the direction was predictable, and whether the payoff justified the risk. A known FDA date with an unknowable committee vote is a flagged binary catalyst—not a retrospective Buy.
+5. **Measure surprise and amplification.** Compare the actual move with the options-implied move and normal volatility. Identify short squeezes, thin floats, crowded positioning and liquidity gaps as amplifiers, not as the underlying business catalyst.
+6. **Compare with a control group.** For every apparent clue, examine similar companies that had the same clue but did not jump. Use event studies, base rates and walk-forward tests so Kestrel learns from failures as well as spectacular winners.
+7. **Create a daily plain-English card.** Answer: what moved, why, what was public beforehand, what was genuinely unforeseeable, what Kestrel would have flagged before the event, what the downside was, and whether the lesson changes tomorrow's opportunity radar.
+8. **Keep learning guarded.** Score every pre-event flag with later returns, drawdown, Brier calibration and benchmark-relative results. Proposed rules run in shadow mode first, require a meaningful sample, remain versioned and reviewable, and never automatically rewrite the live Buy/Sell model.
+9. **Feed only proven lessons back.** A recurring clue may affect the opportunity radar only after out-of-sample evidence shows that it improves results after spreads, slippage and failed events. One dramatic winner can generate a research hypothesis but can never create a rule by itself.
+
+**First case study — REPL, 31 July 2026:** reconstruct the public FDA timeline, the negative staff briefing, the advisory-panel vote, the scheduled 2 August decision, the stock's extreme short interest and the resulting price reaction. Label the meeting as knowable, the favourable 10–3 vote as uncertain beforehand, and the crowded short position as a likely move amplifier. Use this as the acceptance test for the first Mover Autopsy screen.
+
 ## 6. International expansion
 
 - Current international names are US-listed shares or ADRs and use SEC filings; this is not yet the same as direct local-market coverage.

@@ -22,6 +22,7 @@ from analyst_data import fetch_analyst_intelligence
 from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
 from investor_history import investor_calibration_summary, record_investor_ideas
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
+from mover_autopsy import mover_snapshot
 from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
 from sec_data import verify_with_sec
 from security_master import refresh_security_master, security_master_snapshot
@@ -29,6 +30,7 @@ from sarwa_sync import connection_status, discard_pending, mark_applied, pending
 from signal_history import calibration_summary, record_signals
 from source_policy import build_evidence_summary, evidence_policy
 from superinvestors import refresh_superinvestors, superinvestor_snapshot
+from swing_watchlist import swing_watchlist_snapshot
 
 
 ROOT = Path(__file__).resolve().parent
@@ -553,6 +555,12 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/superinvestors":
             self.send_json(superinvestor_snapshot())
+            return
+        if parsed.path == "/api/movers":
+            self.send_json(mover_snapshot())
+            return
+        if parsed.path == "/api/swing-watchlist":
+            self.send_json(swing_watchlist_snapshot())
             return
         if parsed.path == "/api/dashboard":
             opportunities = opportunity_universe()
