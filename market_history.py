@@ -515,12 +515,23 @@ class MarketHistoryPipeline:
             connection.commit()
         return total
 
-    def build_observations(self, start: dt.date, end: dt.date) -> int:
+    def build_observations(self, start: dt.date, end: dt.date,
+                           tickers: Optional[Sequence[str]] = None,
+                           progress: Optional[Any] = None) -> int:
         """Materialise the Phase 1 contract without filling unavailable facts.
 
         Grouped Daily contains no point-in-time market cap, so market_cap remains
         NULL and ``assess_investability`` returns unknown. That is intentional.
+
+        ``tickers`` restricts the build to a chosen universe; the benchmark is
+        always included because every row needs it. Work is committed after each
+        security and progress is reported, so a build interrupted after an hour
+        keeps everything it had already finished rather than discarding it.
         """
+        selected = None
+        if tickers:
+            selected = {ticker.upper() for ticker in tickers}
+            selected.add("SPY")
         label_end = end + dt.timedelta(days=LABEL_TAIL_CALENDAR_DAYS)
         with self.store.connect() as connection:
             action_extent = {
@@ -551,10 +562,19 @@ class MarketHistoryPipeline:
             for values in dividends.values():
                 values.sort()
 
-            bar_rows = connection.execute(
-                """SELECT * FROM daily_bars WHERE session_date BETWEEN ? AND ?
-                   ORDER BY ticker, session_date""", (start.isoformat(), label_end.isoformat())
-            ).fetchall()
+            if selected:
+                placeholders = ",".join("?" * len(selected))
+                bar_rows = connection.execute(
+                    f"""SELECT * FROM daily_bars WHERE session_date BETWEEN ? AND ?
+                        AND ticker IN ({placeholders})
+                        ORDER BY ticker, session_date""",
+                    (start.isoformat(), label_end.isoformat(), *sorted(selected)),
+                ).fetchall()
+            else:
+                bar_rows = connection.execute(
+                    """SELECT * FROM daily_bars WHERE session_date BETWEEN ? AND ?
+                       ORDER BY ticker, session_date""", (start.isoformat(), label_end.isoformat())
+                ).fetchall()
             by_ticker: Dict[str, List[sqlite3.Row]] = {}
             for row in bar_rows:
                 by_ticker.setdefault(row["ticker"], []).append(row)
@@ -589,6 +609,8 @@ class MarketHistoryPipeline:
             spy_dates = sorted(adjusted_closes.get("SPY", {}))
             spy_date_index = {date_value: index for index, date_value in enumerate(spy_dates)}
             inserted = 0
+            completed = 0
+            total_tickers = len(by_ticker)
             for ticker, rows in by_ticker.items():
                 closes = adjusted_closes[ticker]
                 dollar_volumes = [
@@ -680,7 +702,14 @@ class MarketHistoryPipeline:
                         ),
                     )
                     inserted += 1
+                # Commit per security so an interrupted build keeps its work.
+                connection.commit()
+                completed += 1
+                if progress and completed % 25 == 0:
+                    progress(completed, total_tickers, inserted)
             connection.commit()
+            if progress:
+                progress(completed, total_tickers, inserted)
             return inserted
 
     def validate(self, start: dt.date, end: dt.date) -> Dict[str, Any]:
