@@ -162,6 +162,7 @@ Kestrel has the beginnings of a learning record, not yet a learning system:
 - ✅ Outcomes are graded independently. `outcome_source.py` reads the archive's split- and dividend-adjusted closes, enters one session after the decision rather than at the decision price, measures the result against SPY over 30, 90 and 180 days, and takes the maximum drawdown from every session in the holding period. A result inside the declared round-trip cost band counts as neither a hit nor a miss.
 - ✅ Kestrel refuses to grade itself. Where the archive cannot cover a prediction, or a corporate action inside the holding period is unresolved, the call is reported as awaiting or not gradeable instead of scored. Manager ideas measured only from Kestrel's own snapshots are shown as provisional and never count toward validation.
 - ✅ The rule-based score remains the approved **champion**. No journal outcome changes its inputs or weights automatically.
+- ✅ The learning loop is built and runs end to end: features, labelled research set, walk-forward validation with purging, a base-rate champion, a logistic challenger, calibration, promotion gates, a shadow journal and a model-risk report. `python3 learning.py status` reports what it can honestly say; nothing it produces reaches a displayed rating.
 - 🚧 The journals still fall short of evidence for changing signals: they do not yet retain full evidence and feature snapshots, include delisting proceeds, evaluate Hold decisions and missed opportunities, or calculate uncertainty.
 - 🚧 "Confidence" currently describes evidence completeness. It is not a forecast probability and must not be presented as calibrated until it has passed formal calibration tests.
 
@@ -277,19 +278,21 @@ Hit rate remains a useful diagnostic, but is never a sufficient success measure.
 
 #### Phase B — Establish an honest historical research dataset
 
-- Build the bitemporal security master and point-in-time universe.
+- 🚧 Build the bitemporal security master and point-in-time universe. `feature_store.py` builds versioned, as-of-safe feature rows from the archive and `learning_dataset.py` joins them to delayed-entry outcomes; the security master is not yet bitemporal and dead listings are still missing.
 - Reconstruct US fundamentals from official filing acceptance times and preserve amendments/restatements.
 - Introduce macro-release vintages and historical benchmark/factor data.
-- Re-run the current rule-based champion through leakage-safe walk-forward evaluation before introducing machine learning.
+- ✅ Leakage-safe walk-forward evaluation exists in `validation.py`: expanding folds, training rows purged when their outcome window overlaps the test period, an embargo of at least one horizon, and an automated future-information check that must return clean before anything is scored.
 
 #### Phase C — Create simple, interpretable challengers
 
-- Start with regularised logistic or ordinal models for the separate big-move and direction questions.
-- Use feature ablation to prove which evidence families add value.
-- Introduce probability calibration and uncertainty reports.
+- ✅ A regularised logistic challenger answers the big-move and direction questions separately, fitted by penalised Newton steps and reporting readable standardised coefficients. The incumbent it must beat is the plain base rate.
+- ✅ Feature ablation removes one family at a time and reports how much the score worsens without it.
+- ✅ Probability calibration is fitted on a later slice the weights never saw, and reported through Brier score, log loss, skill against the base rate, reliability bins, calibration slope and intercept, and confidence intervals bootstrapped by decision date rather than by row.
 - Do not add more complex models unless they deliver stable out-of-time improvement after all costs and gates.
 
 #### Phase D — Build the portfolio decision layer
+
+This phase is deliberately not started. It converts calibrated forecasts into portfolio decisions, and Kestrel has no calibrated forecast yet — no challenger has passed the gates, so there is nothing trustworthy to convert. Building it now would dress up an uncalibrated probability as a portfolio recommendation, which is the exact failure the rest of this section exists to prevent.
 
 - Convert calibrated forecasts into constrained add/hold/reduce/replace proposals.
 - Use shrinkage covariance, factor exposures, neutral market priors and stress testing.
@@ -297,9 +300,10 @@ Hit rate remains a useful diagnostic, but is never a sufficient success measure.
 
 #### Phase E — Shadow, approve and monitor
 
-- Run challengers daily without affecting displayed actions.
-- Review a monthly model-risk report covering data drift, calibration, realised outcomes, costs, concentration and failures.
-- Permit only gated, capped, reversible live influence after the full shadow period.
+- ✅ `learning.py shadow` refits on fully matured history only, predicts forward for the newest session, and freezes each prediction with a content hash before any outcome exists. Shadow predictions never appear as an action, and a shadow model can never reach the visible research-alert state.
+- ✅ `model_risk.py` produces the monthly review: feature drift, prediction drift, calibration error, reliability, realised outcomes and a named model-risk event for anything that needs a documented resolution.
+- ✅ The promotion gates in `swing_radar_policy.promotion_failures` are now fed by real recorded shadow behaviour through `shadow_journal.promotion_metrics`, instead of being unreachable code. Human acceptance of worst loss, false alerts and missing data remains a gate that no amount of good numbers can satisfy.
+- Permit only gated, capped, reversible live influence after the full shadow period. No model has been promoted; nothing influences a live recommendation.
 
 ### Data-source plan
 
@@ -325,8 +329,8 @@ This tier is enough to build the evidence ledger, prospective shadow programme a
 
 ### Governance and lineage
 
-- Maintain a model inventory: purpose, owner, scope, inputs, intended use, limitations, version, approval status and rollback version.
-- Maintain an experiment registry covering every feature, threshold, model and portfolio rule tested, including rejected variants.
+- ✅ Maintain a model inventory: purpose, owner, scope, inputs, intended use, limitations, version, approval status and rollback version. `model_registry.py` holds it as append-only entries; an approval change adds a superseding entry rather than editing history.
+- ✅ Maintain an experiment registry covering every feature, threshold, model and portfolio rule tested, including rejected variants. Every run is recorded with its verdict and its failed gates, whether it passed or not.
 - Require independent challenge before promotion: a reviewer verifies point-in-time integrity, labels, code, sample construction, costs and conclusions.
 - Monitor input coverage, source drift, feature drift, prediction drift, calibration, realised downside, turnover and exception rates.
 - Treat a source failure, material restatement, corporate-action mismatch, calibration breach or data-quality incident as a model-risk event requiring documented resolution.

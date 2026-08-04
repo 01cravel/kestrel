@@ -300,6 +300,8 @@ const els = {
   evidenceDialog: document.getElementById('evidenceDialog'),
   calibrationSummary: document.getElementById('calibrationSummary'),
   calibrationGrid: document.getElementById('calibrationGrid'),
+  learningSummary: document.getElementById('learningSummary'),
+  learningGrid: document.getElementById('learningGrid'),
   detailDialog: document.getElementById('detailDialog'),
   detailContent: document.getElementById('detailContent'),
   holdingsDialog: document.getElementById('holdingsDialog'),
@@ -2064,6 +2066,50 @@ async function recordInvestorSignals(dashboard, assessments) {
   }
 }
 
+async function loadLearningStatus() {
+  if (!els.learningGrid) return;
+  try {
+    const response = await fetch('/api/learning');
+    const learning = await response.json();
+    if (!response.ok) throw new Error(learning.message || 'The research record is unavailable');
+    renderLearning(learning);
+  } catch (error) {
+    els.learningSummary.textContent = 'The research record is temporarily unavailable.';
+    els.learningGrid.innerHTML = `<div class="empty-card wide"><strong>Not available</strong><span>${escapeHtml(error.message)}</span></div>`;
+  }
+}
+
+function renderLearning(learning) {
+  if (!learning) return;
+  const registry = learning.registry || {};
+  const shadow = learning.shadow || {};
+  const ready = learning.status === 'ready';
+  els.learningSummary.textContent = ready
+    ? 'Candidate models are tested on history and run unseen before they may say anything.'
+    : 'No adjusted price archive yet, so nothing can be trained or tested.';
+  els.learningGrid.innerHTML = `
+    <article>
+      <span>Influence on your ratings</span>
+      <strong>${registry.approvedModels ? `${escapeHtml(registry.approvedModels)} approved` : 'None'}</strong>
+      <p>${escapeHtml(registry.liveInfluence || 'No model influences a live recommendation.')}</p>
+    </article>
+    <article>
+      <span>Experiments recorded</span>
+      <strong>${escapeHtml(registry.experiments ?? 0)}</strong>
+      <p>${escapeHtml(registry.passedExperiments ?? 0)} passed every gate. Failed runs are kept too.</p>
+    </article>
+    <article>
+      <span>Unseen shadow predictions</span>
+      <strong>${escapeHtml(shadow.predictions ?? 0)}</strong>
+      <p>${shadow.sessions ? `${escapeHtml(shadow.sessions)} sessions recorded and frozen.` : 'None recorded yet.'} Never shown as an action.</p>
+    </article>
+    <article>
+      <span>What decides your ratings</span>
+      <strong>The rule-based score</strong>
+      <p>${escapeHtml(learning.champion || '')}</p>
+    </article>`;
+}
+
 function renderCalibration(calibration) {
   if (!calibration) return;
   const hasOutcomes = calibration.maturedSignals > 0;
@@ -3135,6 +3181,7 @@ async function startKestrel() {
   fetchSarwaStatus();
   fetchSwingWatchlist();
   fetchMovers();
+  loadLearningStatus();
   fetchDashboard();
 }
 

@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from analyst_data import fetch_analyst_intelligence
 from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
 from investor_history import investor_calibration_summary, record_investor_ideas
+from learning import learning_status
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
 from mover_autopsy import mover_snapshot
 from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
@@ -667,6 +668,9 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/investor-calibration":
             self.send_json(investor_calibration_summary())
+            return
+        if parsed.path == "/api/learning":
+            self.send_json(learning_status())
             return
         super().do_GET()
 
