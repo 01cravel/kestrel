@@ -212,3 +212,145 @@ def run_study(database: Path = DEFAULT_DATABASE,
             "spread, borrow cost or tax. Real trading would keep less than these figures show."
         ),
     }
+
+
+def persistence_check(database: Path = DEFAULT_DATABASE,
+                      entries: Sequence[int] = ENTRY_OFFSETS,
+                      exits: Sequence[int] = EXIT_OFFSETS,
+                      min_events_each_half: int = 4) -> Dict[str, Any]:
+    """Does a security's best-looking window keep working afterwards?
+
+    For each security the events are split in time. The window that looked best
+    in the earlier half is then measured in the later half. If per-security
+    timing were real, that carried-forward choice would beat simply averaging
+    every window. If it is noise, it will not.
+    """
+    events = collect_events(database)
+    by_ticker: Dict[str, List[Dict[str, Any]]] = {}
+    for event in events:
+        by_ticker.setdefault(event["ticker"], []).append(event)
+
+    combinations = [
+        (entry, exit_offset) for entry in entries for exit_offset in exits
+        if exit_offset > entry
+    ]
+    carried: List[float] = []
+    averages: List[float] = []
+    for ticker, ticker_events in by_ticker.items():
+        ordered = sorted(ticker_events, key=lambda event: event["reactionDate"])
+        half = len(ordered) // 2
+        if half < min_events_each_half or len(ordered) - half < min_events_each_half:
+            continue
+        early, late = ordered[:half], ordered[half:]
+
+        def mean_for(sample: Sequence[Dict[str, Any]], entry: int, exit_offset: int) -> Optional[float]:
+            values = []
+            for event in sample:
+                value = _excess(event["series"], event["reactionIndex"] + entry,
+                                event["reactionIndex"] + exit_offset)
+                if value is not None:
+                    values.append(value)
+            return statistics.mean(values) if values else None
+
+        scored = [
+            (mean_for(early, entry, exit_offset), entry, exit_offset)
+            for entry, exit_offset in combinations
+        ]
+        scored = [row for row in scored if row[0] is not None]
+        if not scored:
+            continue
+        _, best_entry, best_exit = max(scored, key=lambda row: row[0])
+        forward = mean_for(late, best_entry, best_exit)
+        every = [mean_for(late, entry, exit_offset) for entry, exit_offset in combinations]
+        every = [value for value in every if value is not None]
+        if forward is None or not every:
+            continue
+        carried.append(forward)
+        averages.append(statistics.mean(every))
+
+    if not carried:
+        return {"status": "insufficient", "securities": 0}
+    differences = [forward - every for forward, every in zip(carried, averages)]
+    advantage = statistics.mean(differences)
+    interval = block_bootstrap_interval(
+        [{"sessionDate": str(index), "value": value} for index, value in enumerate(differences)],
+        lambda sample: statistics.mean(row["value"] for row in sample) if sample else None,
+    )
+    beat_rate = sum(1 for value in differences if value > 0) / len(differences)
+    # A sign test: with this many securities, a genuine effect would push the
+    # win rate clearly past half rather than sitting on it.
+    error = (0.25 / len(differences)) ** 0.5
+    convincing = bool(
+        interval.get("lower95") is not None and interval["lower95"] > 0
+        and beat_rate - 0.5 > 2 * error
+    )
+    return {
+        "status": "measured",
+        "securities": len(carried),
+        "carriedForwardMean": round(statistics.mean(carried), 3),
+        "allWindowMean": round(statistics.mean(averages), 3),
+        "advantage": round(advantage, 3),
+        "advantageLower95": interval.get("lower95"),
+        "advantageUpper95": interval.get("upper95"),
+        "beatChanceRate": round(beat_rate, 4),
+        "coinFlipRate": 0.5,
+        "verdict": (
+            "The best-looking window carried forward by more than chance."
+            if convincing else
+            "The best-looking window did not carry forward. Choosing a timing per "
+            "security is fitting noise: it wins about as often as a coin."
+        ),
+    }
+
+
+def _daily_excess(rows: Sequence[Tuple[str, float, float]], index: int) -> Optional[float]:
+    """One session's benchmark-relative move, as a percentage."""
+    if index <= 0 or index >= len(rows):
+        return None
+    stock = rows[index][1] / rows[index - 1][1] - 1
+    benchmark = rows[index][2] / rows[index - 1][2] - 1
+    return (stock - benchmark) * 100
+
+
+def move_timing(database: Path = DEFAULT_DATABASE, sessions_after: int = 5,
+                events: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Where in the week the movement actually lands, per security.
+
+    This is a question about size, not direction, and size is far more stable
+    than edge. Knowing that most of a week's movement arrives in one session
+    tells a holder when they are exposed, without implying a trade.
+    """
+    events = collect_events(database) if events is None else events
+    per_ticker: Dict[str, List[List[float]]] = {}
+    for event in events:
+        rows = event["series"]
+        reaction = event["reactionIndex"]
+        moves = []
+        for step in range(sessions_after):
+            value = _daily_excess(rows, reaction + step)
+            if value is None:
+                break
+            moves.append(abs(value))
+        if len(moves) == sessions_after:
+            per_ticker.setdefault(event["ticker"], []).append(moves)
+
+    timings: Dict[str, Dict[str, Any]] = {}
+    for ticker, samples in per_ticker.items():
+        if len(samples) < 3:
+            continue
+        reaction_day = statistics.mean(sample[0] for sample in samples)
+        rest = statistics.mean(sum(sample[1:]) for sample in samples)
+        total = reaction_day + rest
+        if not total:
+            continue
+        other_days = statistics.mean(
+            statistics.mean(sample[1:]) for sample in samples if len(sample) > 1
+        )
+        timings[ticker] = {
+            "events": len(samples),
+            "reactionDayMove": round(reaction_day, 2),
+            "otherDayMove": round(other_days, 2),
+            "reactionShareOfWeek": round(reaction_day / total, 4),
+            "timesAnOrdinaryDay": round(reaction_day / other_days, 1) if other_days else None,
+        }
+    return timings

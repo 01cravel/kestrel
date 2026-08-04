@@ -11,6 +11,8 @@ from pathlib import Path
 from event_study import (
     ROUND_TRIP_COST_PERCENT,
     collect_events,
+    move_timing,
+    persistence_check,
     run_study,
     window_results,
 )
@@ -120,6 +122,29 @@ class WindowTests(unittest.TestCase):
         self.assertGreater(result["meanExcess"], 0)
         self.assertLess(result["meanExcess"], ROUND_TRIP_COST_PERCENT)
         self.assertFalse(result["beatsCosts"])
+
+
+class TimingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.database = Path(self.directory.name) / "market-history.sqlite3"
+
+    def test_a_flat_security_shows_no_concentration(self) -> None:
+        announcements = [("AAA", date) for date in ("2025-03-05", "2025-06-05", "2025-09-04")]
+        _archive(self.database, announcements, drift=0.01)
+        timings = move_timing(self.database)
+        # Every session moves identically, so results day is one fifth of five.
+        self.assertAlmostEqual(timings["AAA"]["reactionShareOfWeek"], 0.2, places=2)
+        self.assertAlmostEqual(timings["AAA"]["timesAnOrdinaryDay"], 1.0, places=1)
+
+    def test_a_security_with_too_few_announcements_is_omitted(self) -> None:
+        _archive(self.database, [("AAA", "2025-03-05")], drift=0.01)
+        self.assertNotIn("AAA", move_timing(self.database))
+
+    def test_persistence_needs_two_halves_of_history(self) -> None:
+        _archive(self.database, [("AAA", "2025-03-05")], drift=0.01)
+        self.assertEqual(persistence_check(self.database)["status"], "insufficient")
 
 
 class StudyTests(unittest.TestCase):

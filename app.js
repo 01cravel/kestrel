@@ -1717,6 +1717,10 @@ function renderSwingWatchlist(payload) {
     const reactionLine = reaction.status === 'measured'
       ? `Past results moved it ${moverPercent(reaction.typicalReactionPercent / 100, 1)} typically, ${moverPercent(reaction.largestPercent / 100, 1)} at most, over ${escapeHtml(reaction.eventsMeasured)} announcements.`
       : 'No measured results reactions yet.';
+    const timing = candidate.moveTiming;
+    const timingLine = timing
+      ? `${plainPercent(timing.reactionShareOfWeek * 100, 0)} of the week's movement has landed on results day itself — ${escapeHtml(timing.timesAnOrdinaryDay)}× an ordinary day, over ${escapeHtml(timing.events)} announcements.`
+      : 'Not enough announcements to say when the movement lands.';
     return `
     <article class="shadow-watch-card">
       <div class="shadow-watch-rank"><span>${escapeHtml(candidate.rank)}</span><small>watch</small></div>
@@ -1724,7 +1728,9 @@ function renderSwingWatchlist(payload) {
         <header><strong>${escapeHtml(candidate.symbol)}</strong><span>${escapeHtml(candidate.volatilityBand)} volatility</span></header>
         <h3>${escapeHtml(results)}</h3>
         <p>${escapeHtml(reactionLine)}</p>
+        <p class="shadow-timing">${escapeHtml(timingLine)}</p>
         <div class="shadow-setup">
+          <div><strong>${timing ? plainPercent(timing.reactionShareOfWeek * 100, 0) : '—'}</strong><span>of the week&rsquo;s move on results day</span></div>
           <div><strong>${plainPercent((own.rate || 0) * 100, 0)}</strong><span>of its own recent weeks moved this much</span></div>
           <div><strong>${escapeHtml((cohort.cohortSessions || 0).toLocaleString())}</strong><span>comparable past sessions measured</span></div>
           <small>This is how often shares in the same state moved sharply—not a view on this share.</small>

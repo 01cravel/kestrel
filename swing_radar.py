@@ -335,8 +335,15 @@ def build_candidates(database: Path = DEFAULT_DATABASE,
 
     rows.sort(key=lambda row: -row["jumpChance10"])
     shortlist = rows[:SHORTLIST]
+    # Where the movement lands is measurable; when to buy is not. The study in
+    # event_study showed no entry or exit timing that survives costs, and no
+    # per-security timing that carries forward better than a coin.
+    from event_study import move_timing
+
+    timings = move_timing(database)
     for row in shortlist:
         row["reactionHistory"] = reaction_history(row["symbol"], database, today)
+        row["moveTiming"] = timings.get(row["symbol"])
     return {
         "status": "ready",
         "radarVersion": RADAR_VERSION,
@@ -355,6 +362,12 @@ def build_candidates(database: Path = DEFAULT_DATABASE,
             "A measured base rate, not a prediction. Every archived session in the same "
             "volatility band and the same scheduled-results state is counted, and the share "
             "that produced the move is reported, blended with this security's own record."
+        ),
+        "timingPolicy": (
+            "No optimal entry or exit is offered. Every declared window around results was "
+            "measured and none survived costs, and a security's best-looking window did not "
+            "carry forward better than chance. What is shown instead is where the movement "
+            "has landed, so exposure is a choice rather than a surprise."
         ),
         "directionPolicy": (
             "No direction is stated. Kestrel can measure how often a security moves sharply; "

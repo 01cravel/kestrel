@@ -19,6 +19,13 @@
         }
       },
       "jumpChance10": 0.4753,
+      "moveTiming": {
+        "events": 6,
+        "otherDayMove": 8.79,
+        "reactionDayMove": 12.19,
+        "reactionShareOfWeek": 0.2574,
+        "timesAnOrdinaryDay": 1.4
+      },
       "ownRecord": {
         "jumps": 128,
         "rate": 0.5079,
@@ -112,6 +119,7 @@
         }
       },
       "jumpChance10": 0.4392,
+      "moveTiming": null,
       "ownRecord": {
         "jumps": 134,
         "rate": 0.5317,
@@ -190,6 +198,13 @@
         }
       },
       "jumpChance10": 0.4376,
+      "moveTiming": {
+        "events": 8,
+        "otherDayMove": 3.95,
+        "reactionDayMove": 14.32,
+        "reactionShareOfWeek": 0.4754,
+        "timesAnOrdinaryDay": 3.6
+      },
       "ownRecord": {
         "jumps": 109,
         "rate": 0.4325,
@@ -283,6 +298,13 @@
         }
       },
       "jumpChance10": 0.4373,
+      "moveTiming": {
+        "events": 10,
+        "otherDayMove": 3.28,
+        "reactionDayMove": 9.64,
+        "reactionShareOfWeek": 0.424,
+        "timesAnOrdinaryDay": 2.9
+      },
       "ownRecord": {
         "jumps": 133,
         "rate": 0.5278,
@@ -392,6 +414,13 @@
         }
       },
       "jumpChance10": 0.4336,
+      "moveTiming": {
+        "events": 8,
+        "otherDayMove": 3.44,
+        "reactionDayMove": 7.93,
+        "reactionShareOfWeek": 0.3657,
+        "timesAnOrdinaryDay": 2.3
+      },
       "ownRecord": {
         "jumps": 107,
         "rate": 0.4246,
@@ -470,7 +499,7 @@
   ],
   "chanceMethod": "A measured base rate, not a prediction. Every archived session in the same volatility band and the same scheduled-results state is counted, and the share that produced the move is reported, blended with this security's own record.",
   "directionPolicy": "No direction is stated. Kestrel can measure how often a security moves sharply; which way it moves at a scheduled announcement is not knowable in advance.",
-  "frozenAt": "2026-08-04T19:23:22Z",
+  "frozenAt": "2026-08-04T19:28:57Z",
   "policyVersion": "2026.08.02.1",
   "radarVersion": "2026.08.1",
   "securitiesConsidered": 944,
@@ -483,6 +512,7 @@
     "10"
   ],
   "tierNote": "Each tier is the measured chance of a move of at least that size, in either direction, within one trading week. Smaller moves are commoner, so the ladder always falls as the bar rises.",
+  "timingPolicy": "No optimal entry or exit is offered. Every declared window around results was measured and none survived costs, and a security's best-looking window did not carry forward better than chance. What is shown instead is where the movement has landed, so exposure is a choice rather than a surprise.",
   "title": "Could move sharply this week",
   "weekEnding": "2026-08-07"
 }
