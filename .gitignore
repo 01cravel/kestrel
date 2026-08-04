@@ -23,6 +23,7 @@
 kestrel-legacy.html
 __pycache__/
 *.pyc
+.kestrel-data
 .kestrel-data/
 .kestrel-model-inventory.json
 .kestrel-model-inventory.tmp
