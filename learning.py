@@ -30,7 +30,7 @@ from learning_dataset import (
     subset_vectors,
 )
 from model_registry import register_experiment, registry_summary
-from outcome_source import DEFAULT_DATABASE, shared_source
+from outcome_source import DEFAULT_DATABASE, OutcomeSource
 from shadow_journal import promotion_metrics, record_shadow_predictions, shadow_summary
 from validation import (
     DEFAULT_OUTER_PERIODS,
@@ -351,7 +351,7 @@ def _open_predictions(store: FeatureStore, horizon: int,
 
 def learning_status(database: Path = DEFAULT_DATABASE) -> Dict[str, Any]:
     """What the learning system can honestly say right now."""
-    coverage = shared_source().coverage()
+    coverage = OutcomeSource(database).coverage()
     registry = registry_summary()
     ready = coverage["status"] == "ready"
     return {
