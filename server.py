@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from analyst_data import fetch_analyst_intelligence
 from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
-from earnings_calendar import earnings_context
+from earnings_calendar import earnings_context, earnings_radar
 from investor_history import investor_calibration_summary, record_investor_ideas
 from learning import learning_status
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
@@ -677,6 +677,12 @@ class KestrelHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 self.send_json(earnings_context(symbol))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
+        if parsed.path == "/api/earnings-radar":
+            try:
+                self.send_json(earnings_radar(all_symbols()))
             except (RuntimeError, ValueError) as error:
                 self.send_json({"ok": False, "message": str(error)}, status=502)
             return

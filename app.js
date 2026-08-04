@@ -241,6 +241,7 @@ const state = {
   sarwa: null,
   movers: null,
   swingWatchlist: null,
+  earningsRadar: null,
 };
 
 const els = {
@@ -302,6 +303,10 @@ const els = {
   calibrationGrid: document.getElementById('calibrationGrid'),
   learningSummary: document.getElementById('learningSummary'),
   learningGrid: document.getElementById('learningGrid'),
+  eventSection: document.getElementById('eventSection'),
+  eventSummary: document.getElementById('eventSummary'),
+  eventGrid: document.getElementById('eventGrid'),
+  eventNote: document.getElementById('eventNote'),
   detailDialog: document.getElementById('detailDialog'),
   detailContent: document.getElementById('detailContent'),
   holdingsDialog: document.getElementById('holdingsDialog'),
@@ -1825,6 +1830,7 @@ function calculateAndRender() {
   renderSuperinvestors(dashboard, assessments, candidateAssessments);
   renderOpportunities(dashboard);
   renderChanges(dashboard);
+  renderEarningsRadar();
   recordDailySignals(dashboard, [...Object.values(assessments), ...candidateAssessments]);
   recordInvestorSignals(dashboard, [...Object.values(assessments), ...candidateAssessments]);
   ensureBenchmarkPerformance(ownedSymbols);
@@ -2064,6 +2070,74 @@ async function recordInvestorSignals(dashboard, assessments) {
   } catch (error) {
     state.savedInvestorSignalsFor = null;
   }
+}
+
+async function loadEarningsRadar() {
+  if (!els.eventGrid) return;
+  try {
+    const response = await fetch('/api/earnings-radar');
+    const radar = await response.json();
+    if (!response.ok) throw new Error(radar.message || 'The filing calendar is unavailable');
+    state.earningsRadar = radar;
+    renderEarningsRadar();
+  } catch (error) {
+    els.eventSection.hidden = false;
+    els.eventSummary.textContent = 'The filing calendar is temporarily unavailable.';
+    els.eventGrid.innerHTML = `<div class="empty-card wide"><strong>Not available</strong><span>${escapeHtml(error.message)}</span></div>`;
+  }
+}
+
+function whenLabel(days) {
+  if (days <= 0) return 'Today or already reported';
+  if (days === 1) return 'Tomorrow';
+  return `In ${days} days`;
+}
+
+function renderEarningsRadar() {
+  const radar = state.earningsRadar;
+  if (!radar || !els.eventGrid) return;
+  const events = (radar.events || []).map(event => {
+    const shares = number(state.positions[event.symbol]?.shares) || 0;
+    const price = number(state.assessments?.[event.symbol]?.metrics?.currentPrice) || 0;
+    const value = shares * price;
+    const typical = number(event.reaction?.typicalReactionPercent);
+    return { ...event, value, owned: value > 0, typical, exposure: value && typical ? value * typical / 100 : null };
+  }).sort((a, b) => (b.exposure || 0) - (a.exposure || 0) || a.daysAway - b.daysAway);
+
+  if (!events.length) {
+    els.eventSection.hidden = true;
+    return;
+  }
+  els.eventSection.hidden = false;
+
+  const owned = events.filter(event => event.owned);
+  const totalExposure = owned.reduce((sum, event) => sum + (event.exposure || 0), 0);
+  els.eventSummary.textContent = owned.length
+    ? `${owned.length} of your holdings report within ${radar.horizonDays} days. A typical reaction moves about ${money(totalExposure)} of your money.`
+    : `${events.length} watched companies report within ${radar.horizonDays} days. You hold none of them.`;
+
+  els.eventGrid.innerHTML = events.slice(0, 8).map(event => {
+    const reaction = event.reaction || {};
+    const size = event.typical
+      ? `${plainPercent(event.typical)} typical reaction, ${reaction.multipleOfOrdinaryNight || '?'}× a normal night`
+      : 'No measured reaction history';
+    const exposure = event.owned && event.exposure
+      ? `Your ${money(event.value)} position typically moves <strong>${money(event.exposure)}</strong> on the day.`
+      : 'Not currently held.';
+    const confidence = event.windowIsOpen
+      ? `Window open now (${escapeHtml(event.windowStart)} to ${escapeHtml(event.windowEnd)}).`
+      : `Expected ${escapeHtml(event.expectedDate)}, give or take ${escapeHtml(event.windowHalfWidthDays)} days.`;
+    return `
+    <article class="${event.owned ? 'event-owned' : ''}">
+      <span>${escapeHtml(event.symbol)}${event.owned ? ' · held' : ''}</span>
+      <strong>${escapeHtml(whenLabel(event.daysAway))}</strong>
+      <p>${escapeHtml(size)}. ${exposure} ${confidence}</p>
+    </article>`;
+  }).join('');
+
+  els.eventNote.textContent =
+    'Dates are estimated from each company’s past SEC filing cadence, not an announced diary. '
+    + 'Sizes are what past results moved; direction is not stated and is not knowable in advance.';
 }
 
 async function loadLearningStatus() {
@@ -3182,6 +3256,7 @@ async function startKestrel() {
   fetchSwingWatchlist();
   fetchMovers();
   loadLearningStatus();
+  loadEarningsRadar();
   fetchDashboard();
 }
 

@@ -91,6 +91,48 @@ class EarningsCalendarTests(unittest.TestCase):
         for word in ("buy", "sell", "expect a rise", "will beat"):
             self.assertNotIn(word, combined)
 
+    def test_an_extra_filing_inside_a_quarter_does_not_open_the_window_early(self) -> None:
+        """A guidance 8-K days after results must not become the cadence."""
+        rows = [
+            ("8-K", "2.02", "2026-07-24", "2026-07-24T20:00:00.000Z", "2026-06-30"),
+            ("8-K", "2.02", "2026-07-14", "2026-07-14T20:00:00.000Z", "2026-06-30"),
+            ("8-K", "2.02", "2026-04-24", "2026-04-24T20:00:00.000Z", "2026-03-31"),
+            ("8-K", "2.02", "2026-01-23", "2026-01-23T20:00:00.000Z", "2025-12-31"),
+            ("8-K", "2.02", "2025-10-24", "2025-10-24T20:00:00.000Z", "2025-09-30"),
+            ("8-K", "2.02", "2025-07-25", "2025-07-25T20:00:00.000Z", "2025-06-30"),
+        ]
+        earnings_calendar._sec_json = lambda url: _submissions(rows)
+        result = next_expected("HCA", today=dt.date(2026, 8, 4))
+        self.assertEqual(result["status"], "projected")
+        window = result["projection"]
+        # Roughly a quarter after 24 July, not ten days after it.
+        self.assertGreater(window["expectedDate"], "2026-10-01")
+        self.assertFalse(window["windowIsOpen"])
+
+    def test_an_irregular_filer_is_refused_rather_than_guessed(self) -> None:
+        rows = [
+            ("8-K", "2.02", date, f"{date}T20:00:00.000Z", date)
+            for date in ("2026-05-14", "2026-05-12", "2026-04-28", "2026-03-09",
+                         "2026-01-16", "2025-11-12", "2025-09-09")
+        ]
+        earnings_calendar._sec_json = lambda url: _submissions(rows)
+        result = next_expected("ONDS", today=dt.date(2026, 8, 4))
+        self.assertEqual(result["status"], "irregular-cadence")
+        self.assertIsNone(result["projection"])
+
+    def test_a_passed_window_is_reported_as_overdue(self) -> None:
+        result = next_expected("APP", today=dt.date(2026, 9, 30))
+        self.assertTrue(result["projection"]["overdue"])
+        context = earnings_context("APP", today=dt.date(2026, 9, 30))
+        self.assertEqual(context["flag"], "overdue")
+
+    def test_window_width_is_labelled_so_a_vague_date_looks_vague(self) -> None:
+        result = next_expected("APP", today=dt.date(2026, 8, 4))
+        window = result["projection"]
+        self.assertIn(window["precision"], {"firm", "approximate", "wide"})
+        self.assertLessEqual(window["windowHalfWidthDays"],
+                             earnings_calendar.MAX_WINDOW_HALF_WIDTH_DAYS)
+
     def test_too_little_history_refuses_to_project(self) -> None:
         earnings_calendar._sec_json = lambda url: _submissions(QUARTERLY[:1])
         result = next_expected("APP", today=dt.date(2026, 8, 4))

@@ -4129,3 +4129,22 @@ footer {
     transition-duration: 0.01ms !important;
   }
 }
+
+.event-section .calibration-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.event-section .calibration-grid article.event-owned {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.event-section .calibration-grid article.event-owned span {
+  color: var(--amber, #f2b230);
+}
+
+.event-note {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
