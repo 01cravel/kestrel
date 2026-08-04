@@ -268,6 +268,15 @@ class MarketHistoryStore:
                 ON swing_observations(session_date, eligibility_status);
             CREATE INDEX IF NOT EXISTS swing_observations_ticker_date
                 ON swing_observations(ticker, session_date);
+            CREATE TABLE IF NOT EXISTS issuer_events (
+                ticker TEXT NOT NULL, cik TEXT, event_type TEXT NOT NULL,
+                event_date TEXT NOT NULL, published_at TEXT NOT NULL,
+                available_at TEXT NOT NULL, value REAL, detail TEXT,
+                accession TEXT NOT NULL, source TEXT NOT NULL, retrieved_at TEXT NOT NULL,
+                PRIMARY KEY (ticker, event_type, accession, event_date, detail)
+            );
+            CREATE INDEX IF NOT EXISTS issuer_events_lookup
+                ON issuer_events(ticker, available_at);
             """
         )
         connection.execute(

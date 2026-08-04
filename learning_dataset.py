@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from feature_store import (
+    EVENT_FEATURE_NAMES,
     FEATURE_NAMES,
     FEATURE_VERSION,
     FeatureStore,
@@ -32,6 +33,7 @@ from feature_store import (
     build_features,
     feature_vector,
     research_eligible,
+    with_events,
 )
 from outcome_source import COST_BAND_PERCENT, DEFAULT_DATABASE
 from swing_radar_policy import POLICY_VERSION
@@ -76,8 +78,14 @@ def _outcome(history: SecurityHistory, index: int, horizon: int) -> Optional[Dic
 
 
 def build_rows(history: SecurityHistory, horizon: int,
-               require_complete: bool = True) -> List[Dict[str, Any]]:
-    """Labelled rows for one security at one horizon."""
+               require_complete: bool = True,
+               events: Optional[Sequence[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """Labelled rows for one security at one horizon.
+
+    When ``events`` is supplied the row carries the insider and filing features
+    as well, and the vector spans both families.
+    """
+    names = (tuple(FEATURE_NAMES) + tuple(EVENT_FEATURE_NAMES)) if events is not None else FEATURE_NAMES
     threshold = horizon_threshold(horizon)
     rows: List[Dict[str, Any]] = []
     for index in range(len(history)):
@@ -88,9 +96,11 @@ def build_rows(history: SecurityHistory, horizon: int,
         if outcome is None:
             continue
         features = build_features(history, index)
+        if events is not None:
+            features = with_events(features, events)
         if require_complete and not features["complete"]:
             continue
-        vector = feature_vector(features)
+        vector = feature_vector(features, names)
         if vector is None:
             continue
         excess = outcome["excessReturn"]
@@ -105,6 +115,7 @@ def build_rows(history: SecurityHistory, horizon: int,
             "exitDate": outcome["exitDate"],
             "horizonSessions": horizon,
             "features": features["values"],
+            "featureSet": features.get("featureSet", "price"),
             "vector": vector,
             "excessReturn": excess,
             "maxDrawdown": outcome["maxDrawdown"],
@@ -118,14 +129,26 @@ def build_rows(history: SecurityHistory, horizon: int,
 def build_dataset(horizon: int, database: Path = DEFAULT_DATABASE,
                   start: Optional[str] = None, end: Optional[str] = None,
                   tickers: Optional[Sequence[str]] = None,
-                  exclude_benchmark: bool = True) -> List[Dict[str, Any]]:
-    """Assemble the full research set, sorted chronologically."""
+                  exclude_benchmark: bool = True,
+                  include_events: bool = False) -> List[Dict[str, Any]]:
+    """Assemble the full research set, sorted chronologically.
+
+    ``include_events`` restricts the set to issuers whose SEC filings have been
+    ingested, so every row carries the same evidence and the comparison stays
+    like for like.
+    """
     store = FeatureStore(database)
     rows: List[Dict[str, Any]] = []
     for history in store.iter_histories(start=start, end=end, tickers=tickers):
         if exclude_benchmark and history.ticker == "SPY":
             continue
-        rows.extend(build_rows(history, horizon))
+        events = None
+        if include_events:
+            from sec_events import load_events
+            events = load_events(history.ticker, database)
+            if not events:
+                continue
+        rows.extend(build_rows(history, horizon, events=events))
     rows.sort(key=lambda row: (row["sessionDate"], row["ticker"]))
     return rows
 

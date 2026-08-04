@@ -40,7 +40,8 @@ _LAST_REQUEST = 0.0
 _TICKER_MAP: Optional[Dict[str, Dict[str, Any]]] = None
 
 
-def _sec_json(url: str) -> Any:
+def sec_bytes(url: str, accept: str = "application/json") -> bytes:
+    """One rate-limited SEC request. Every SEC caller shares this pacing."""
     global _LAST_REQUEST
     with _REQUEST_LOCK:
         elapsed = time.monotonic() - _LAST_REQUEST
@@ -50,19 +51,26 @@ def _sec_json(url: str) -> Any:
             url,
             headers={
                 "User-Agent": SEC_USER_AGENT,
-                "Accept": "application/json",
+                "Accept": accept,
             },
         )
         try:
             with urllib.request.urlopen(request, timeout=25) as response:
                 _LAST_REQUEST = time.monotonic()
-                return json.loads(response.read().decode("utf-8"))
+                return response.read()
         except urllib.error.HTTPError as error:
             _LAST_REQUEST = time.monotonic()
             raise RuntimeError(f"SEC returned HTTP {error.code}") from error
         except (urllib.error.URLError, TimeoutError, socket.timeout, ValueError) as error:
             _LAST_REQUEST = time.monotonic()
             raise RuntimeError("SEC filing data was unavailable") from error
+
+
+def _sec_json(url: str) -> Any:
+    try:
+        return json.loads(sec_bytes(url).decode("utf-8"))
+    except ValueError as error:
+        raise RuntimeError("SEC filing data was unavailable") from error
 
 
 def _ticker_map() -> Dict[str, Dict[str, Any]]:

@@ -22,12 +22,15 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
+from zoneinfo import ZoneInfo
+
 from outcome_source import DEFAULT_DATABASE
 from swing_radar_policy import (
     MIN_MEDIAN_DOLLAR_VOLUME_20D_USD,
     MIN_PRICE_USD,
     MIN_PRIOR_SESSIONS,
     POLICY_VERSION,
+    feature_is_available,
 )
 
 
@@ -42,7 +45,14 @@ VOLUME_WINDOW = 60
 VOLUME_RECENT = 5
 TRADING_SESSIONS_PER_YEAR = 252
 
-FEATURE_NAMES: Tuple[str, ...] = (
+EVENT_FEATURE_NAMES: Tuple[str, ...] = (
+    "days_since_results",
+    "days_since_insider_buy",
+    "insider_net_value_90d",
+    "material_filings_30d",
+)
+
+PRICE_FEATURE_NAMES: Tuple[str, ...] = (
     "excess_return_5d",
     "excess_return_21d",
     "excess_return_63d",
@@ -55,6 +65,14 @@ FEATURE_NAMES: Tuple[str, ...] = (
     "log_dollar_volume",
     "return_dispersion_21d",
 )
+
+# Event features are optional: an issuer with no ingested filings still yields a
+# usable price-only row, and the learning loop reports which set it used.
+FEATURE_NAMES: Tuple[str, ...] = PRICE_FEATURE_NAMES
+
+# Insider windows are capped so a long-quiet issuer does not produce an
+# unbounded feature that dwarfs everything else once standardised.
+MAX_DAYS_SINCE_EVENT = 365
 
 
 def _finite(value: Any) -> Optional[float]:
@@ -202,6 +220,74 @@ def build_features(history: SecurityHistory, index: int) -> Dict[str, Any]:
     }
 
 
+def session_cutoff(session_date: str) -> str:
+    """The documented decision cutoff for a session, in UTC."""
+    local = dt.datetime.combine(
+        dt.date.fromisoformat(session_date), dt.time(16, 15), ZoneInfo("America/New_York")
+    )
+    return local.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def event_features(events: Sequence[Dict[str, Any]], session_date: str) -> Dict[str, Any]:
+    """Insider and filing features, using only filings readable by the cutoff.
+
+    Availability is enforced by ``feature_is_available``, so a filing accepted
+    after the session's cutoff cannot reach the row even though its filing date
+    may be the same calendar day.
+    """
+    cutoff = session_cutoff(session_date)
+    visible = [
+        event for event in events
+        if feature_is_available(
+            {"published_at": event.get("published_at"), "available_at": event.get("available_at")},
+            cutoff,
+        )
+    ]
+    session = dt.date.fromisoformat(session_date)
+
+    def days_since(event_type: str) -> Optional[float]:
+        dates = [
+            dt.date.fromisoformat(event["event_date"])
+            for event in visible
+            if event.get("event_type") == event_type and event.get("event_date")
+        ]
+        usable = [day for day in dates if day <= session]
+        if not usable:
+            return None
+        return float(min(MAX_DAYS_SINCE_EVENT, (session - max(usable)).days))
+
+    def window_value(event_type: str, days: int) -> float:
+        start = session - dt.timedelta(days=days)
+        total = 0.0
+        for event in visible:
+            if event.get("event_type") != event_type or not event.get("event_date"):
+                continue
+            day = dt.date.fromisoformat(event["event_date"])
+            if start <= day <= session:
+                total += _finite(event.get("value")) or 0.0
+        return total
+
+    buys = window_value("insider_buy", 90)
+    sells = window_value("insider_sell", 90)
+    net = buys - sells
+    material = sum(
+        1 for event in visible
+        if event.get("event_type") == "filing_event" and event.get("event_date")
+        and (session - dt.timedelta(days=30)) <= dt.date.fromisoformat(event["event_date"]) <= session
+    )
+    return {
+        "days_since_results": days_since("results"),
+        "days_since_insider_buy": days_since("insider_buy"),
+        # Signed log keeps a $200m sale and a $2m purchase on a comparable scale.
+        "insider_net_value_90d": (
+            math.copysign(math.log10(1 + abs(net)), net) if net else 0.0
+        ),
+        "material_filings_30d": float(material),
+        "eventsVisible": len(visible),
+        "cutoff": cutoff,
+    }
+
+
 def research_eligible(history: SecurityHistory, index: int) -> Dict[str, Any]:
     """Liquidity and identity screen for research rows.
 
@@ -286,6 +372,21 @@ class FeatureStore:
                 yield current
         finally:
             connection.close()
+
+
+def with_events(features: Dict[str, Any], events: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge event features into a price feature row, recomputing completeness."""
+    extra = event_features(events, features["sessionDate"])
+    values = dict(features["values"])
+    for name in EVENT_FEATURE_NAMES:
+        values[name] = extra.get(name)
+    names = tuple(PRICE_FEATURE_NAMES) + tuple(EVENT_FEATURE_NAMES)
+    missing = sorted(name for name in names if values.get(name) is None)
+    return {
+        **features, "values": values, "missing": missing, "complete": not missing,
+        "featureSet": "price+events", "eventsVisible": extra["eventsVisible"],
+        "cutoff": extra["cutoff"],
+    }
 
 
 def feature_vector(row: Dict[str, Any], names: Sequence[str] = FEATURE_NAMES) -> Optional[List[float]]:

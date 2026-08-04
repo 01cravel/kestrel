@@ -46,7 +46,7 @@ The source policy is now explicit in [SOURCE_POLICY.md](SOURCE_POLICY.md). Kestr
 
 ### No-cost accuracy upgrades before another data subscription
 
-1. Ingest SEC Form 4 insider purchases and sales directly, separating meaningful open-market buying from routine share awards and tax sales.
+1. ✅ Ingest SEC Form 4 insider purchases and sales directly, separating meaningful open-market buying from routine share awards and tax sales. `sec_events.py` counts only transaction codes P and S; awards, option exercises, tax withholding, gifts and conversions are excluded because the insider chose neither timing nor price. Sales made under a pre-arranged 10b5-1 plan are recorded separately from discretionary ones. Across 28 holdings this found three genuine open-market purchases in 180 days against $700m of selling — a ratio that only means anything because awards are not counted as buying.
 2. ✅ Ingest SEC 13F filings directly and compare institutional positions quarter by quarter, while clearly showing the reporting delay. Eight long-equity managers now feed a separate research-candidate tape; share classes are merged at company level, every discovery receives an exact independent verdict, and disclosed conviction can refine—but never override—the research and confidence gates.
 3. Capture company-issued guidance and earnings releases from SEC filings and investor-relations pages, then compare management’s latest range with its previous range and the analyst consensus.
 4. Compare each valuation with the company’s own history and genuinely similar businesses; never use a broad sector average when the business model is materially different.
