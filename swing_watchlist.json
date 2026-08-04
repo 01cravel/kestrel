@@ -1,0 +1,188 @@
+{
+  "status": "shadow",
+  "title": "Could move sharply this week",
+  "weekEnding": "2026-08-07",
+  "frozenAt": "2026-08-03T17:09:00-04:00",
+  "priceEvidenceThrough": "2026-07-31",
+  "target": "A move of at least 10% more than the S&P 500 by the next close after the event.",
+  "directionPolicy": "Direction unknown. There is not yet a validated model that can honestly call up versus down.",
+  "chanceMethod": "Experimental empirical-Bayes estimate: next-session rises of at least 10% versus SPY after the company's latest 7–8 SEC earnings filings, shrunk toward the 31% pooled rate across these five companies with an eight-event prior weight.",
+  "learnedSetup": {
+    "baseSwingRate": 0.015,
+    "signals": [
+      {
+        "key": "highVolatility",
+        "headline": "8.1×",
+        "plainEnglish": "more 10% moves among highly volatile shares"
+      },
+      {
+        "key": "strongTrend",
+        "headline": "4.1×",
+        "plainEnglish": "more after a 15%+ move in the prior month"
+      },
+      {
+        "key": "volumeBuild",
+        "headline": "2.4×",
+        "plainEnglish": "more when recent trading volume was building"
+      },
+      {
+        "key": "repeatMover",
+        "headline": "83%",
+        "plainEnglish": "of giant-move events came from repeat movers"
+      }
+    ],
+    "warning": "Research result, not a promise: these clues overlap, can point up or down, and are never multiplied into a fake probability. Corporate-action and point-in-time market-value filters are still incomplete."
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "symbol": "AAOI",
+      "name": "Applied Optoelectronics",
+      "event": "Second-quarter results and third-quarter outlook",
+      "eventAt": "2026-08-06T16:30:00-04:00",
+      "direction": "Unknown",
+      "jumpChance10": 0.28,
+      "earningsEventsMeasured": 8,
+      "earningsJumpsAbove10": 2,
+      "bigSwingDays252": 55,
+      "annualisedVolatility": 1.42,
+      "return20d": -0.22,
+      "medianDollarVolume20d": 944700000,
+      "volumeBuild": 0.946,
+      "setupSignals": {
+        "scheduledCatalyst": true,
+        "repeatMover": true,
+        "highVolatility": true,
+        "strongTrend": true,
+        "volumeBuild": false
+      },
+      "setupSignalsPassed": 4,
+      "setupSignalsTotal": 5,
+      "whyWatch": "This is the most repeatedly explosive share in the five-name test: 55 benchmark-relative moves above 10% in the last 252 sessions. Earnings provide a dated trigger.",
+      "upsideCase": "AI-network demand and the next-quarter outlook exceed what the market has priced in.",
+      "downsideCase": "Growth or guidance fails to justify the expectations already attached to the AI story.",
+      "sourceName": "Applied Optoelectronics investor relations",
+      "sourceUrl": "https://investors.ao-inc.com/news-releases/news-release-details/applied-optoelectronics-announces-date-second-quarter-2026"
+    },
+    {
+      "rank": 2,
+      "symbol": "ALAB",
+      "name": "Astera Labs",
+      "event": "Second-quarter earnings call",
+      "eventAt": "2026-08-04T16:30:00-04:00",
+      "direction": "Unknown",
+      "jumpChance10": 0.28,
+      "earningsEventsMeasured": 8,
+      "earningsJumpsAbove10": 2,
+      "bigSwingDays252": 25,
+      "annualisedVolatility": 1.20,
+      "return20d": -0.234,
+      "medianDollarVolume20d": 1293600000,
+      "volumeBuild": 1.075,
+      "setupSignals": {
+        "scheduledCatalyst": true,
+        "repeatMover": true,
+        "highVolatility": true,
+        "strongTrend": true,
+        "volumeBuild": false
+      },
+      "setupSignalsPassed": 4,
+      "setupSignalsTotal": 5,
+      "whyWatch": "The shares have produced 25 benchmark-relative 10% moves in the last 252 sessions and fell 23% over the latest measured month. Earnings can resolve whether that fall was excessive or justified.",
+      "upsideCase": "Results beat the company's prior outlook and show that custom AI-connectivity products are ramping quickly.",
+      "downsideCase": "Customer concentration or a slower product ramp weakens the growth story.",
+      "sourceName": "Astera Labs investor relations",
+      "sourceUrl": "https://ir.asteralabs.com/events/event-details/astera-labs-second-quarter-2026-earnings-call"
+    },
+    {
+      "rank": 3,
+      "symbol": "IONQ",
+      "name": "IonQ",
+      "event": "Second-quarter results and business outlook",
+      "eventAt": "2026-08-05T16:30:00-04:00",
+      "direction": "Unknown",
+      "jumpChance10": 0.28,
+      "earningsEventsMeasured": 8,
+      "earningsJumpsAbove10": 2,
+      "bigSwingDays252": 17,
+      "annualisedVolatility": 0.82,
+      "return20d": -0.258,
+      "medianDollarVolume20d": 682500000,
+      "volumeBuild": 1.043,
+      "setupSignals": {
+        "scheduledCatalyst": true,
+        "repeatMover": true,
+        "highVolatility": true,
+        "strongTrend": true,
+        "volumeBuild": false
+      },
+      "setupSignalsPassed": 4,
+      "setupSignalsTotal": 5,
+      "whyWatch": "IonQ has produced 17 benchmark-relative 10% moves in the last year. Its first quarter beat guidance and management raised its full-year revenue range, setting a demanding comparison.",
+      "upsideCase": "Revenue beats the $65–68 million prior range and management raises the $260–270 million full-year outlook again.",
+      "downsideCase": "Commercial progress or cash use disappoints against the very high growth expectations.",
+      "sourceName": "IonQ investor relations",
+      "sourceUrl": "https://investors.ionq.com/news/news-details/2026/IonQ-to-Report-Second-Quarter-2026-Financial-Results-on-August-5-2026/default.aspx"
+    },
+    {
+      "rank": 4,
+      "symbol": "APP",
+      "name": "AppLovin",
+      "event": "Second-quarter results",
+      "eventAt": "2026-08-05T17:00:00-04:00",
+      "direction": "Unknown",
+      "jumpChance10": 0.47,
+      "earningsEventsMeasured": 8,
+      "earningsJumpsAbove10": 5,
+      "bigSwingDays252": 9,
+      "annualisedVolatility": 0.61,
+      "return20d": -0.249,
+      "medianDollarVolume20d": 2361200000,
+      "volumeBuild": 0.976,
+      "setupSignals": {
+        "scheduledCatalyst": true,
+        "repeatMover": true,
+        "highVolatility": false,
+        "strongTrend": true,
+        "volumeBuild": false
+      },
+      "setupSignalsPassed": 3,
+      "setupSignalsTotal": 5,
+      "whyWatch": "AppLovin has produced nine benchmark-relative 10% moves in the last 252 sessions and was down 25% over the latest measured month. The earnings update is a clear repricing point.",
+      "upsideCase": "Advertising growth, margins and forward commentary show that the recent price fall went too far.",
+      "downsideCase": "Growth or guidance slows while expectations remain demanding.",
+      "sourceName": "AppLovin investor relations",
+      "sourceUrl": "https://investors.applovin.com/news/news-details/2026/AppLovin-to-Announce-Second-Quarter-2026-Results/default.aspx"
+    },
+    {
+      "rank": 5,
+      "symbol": "AMD",
+      "name": "Advanced Micro Devices",
+      "event": "Fiscal second-quarter results",
+      "eventAt": "2026-08-04T17:00:00-04:00",
+      "direction": "Unknown",
+      "jumpChance10": 0.23,
+      "earningsEventsMeasured": 7,
+      "earningsJumpsAbove10": 1,
+      "bigSwingDays252": 7,
+      "annualisedVolatility": 0.86,
+      "return20d": -0.08,
+      "medianDollarVolume20d": 14426400000,
+      "volumeBuild": 1.109,
+      "setupSignals": {
+        "scheduledCatalyst": true,
+        "repeatMover": true,
+        "highVolatility": true,
+        "strongTrend": false,
+        "volumeBuild": false
+      },
+      "setupSignalsPassed": 3,
+      "setupSignalsTotal": 5,
+      "whyWatch": "AMD has produced seven benchmark-relative 10% moves in the last 252 sessions. Recent large AI partnerships make data-centre growth and guidance the decisive evidence.",
+      "upsideCase": "Data-centre growth and the forward outlook confirm that new AI deployments are turning into revenue faster than expected.",
+      "downsideCase": "Export limits, supply costs or guidance show that market expectations ran ahead of near-term earnings.",
+      "sourceName": "AMD investor relations",
+      "sourceUrl": "https://ir.amd.com/news-events/press-releases/detail/1289/amd-to-report-fiscal-second-quarter-2026-financial-results"
+    }
+  ]
+}

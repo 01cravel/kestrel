@@ -1,0 +1,58 @@
+{
+  "2026-07-31:REPL": {
+    "status": "verified",
+    "category": "FDA decision",
+    "headline": "FDA advisers backed RP1 by 10 votes to 3",
+    "plainEnglish": "Independent FDA advisers voted 10–3 that RP1's benefits outweighed its risks. That sharply improved the perceived chance of approval and explains why the shares more than doubled.",
+    "knownBefore": "The 30 July FDA panel and 2 August decision deadline were public by 26 June. This was a visible, high-impact event worth monitoring before the move.",
+    "unknown": "The panel's vote—and therefore the direction of the share move—could not be known in advance.",
+    "predictability": "event_known_direction_uncertain",
+    "publishedAt": "2026-07-30T16:00:00-04:00",
+    "sources": [
+      {
+        "name": "FDA advisory committee meeting, materials and recording",
+        "url": "https://www.fda.gov/advisory-committees/advisory-committee-calendar/cellular-tissue-and-gene-therapies-advisory-committee-july-30-2026-meeting-announcement-updated"
+      },
+      {
+        "name": "Replimune's advance notice of the FDA timetable",
+        "url": "https://ir.replimune.com/news-releases/news-release-details/replimune-announces-fda-acceptance-rp1-biologics-license"
+      }
+    ]
+  },
+  "2026-07-31:IESC": {
+    "status": "verified",
+    "category": "Earnings",
+    "headline": "Profit nearly doubled and backlog reached $4.5 billion",
+    "plainEnglish": "IES reported revenue up 40%, operating profit up 60% and net income up 98%. Backlog reached $4.5 billion and the company announced a two-for-one share split. Those unusually strong results explain the jump.",
+    "knownBefore": "IES announced on 27 July that results would arrive before the market opened on 31 July. Earlier reports already showed strong data-centre demand, but the size of this quarter's improvement was not public.",
+    "unknown": "The exact results, the stock split and the market's reaction were not knowable before the release.",
+    "predictability": "event_known_direction_uncertain",
+    "publishedAt": "2026-07-31T07:45:00-04:00",
+    "sources": [
+      {
+        "name": "IES fiscal Q3 2026 results",
+        "url": "https://investors.ies-corporate.com/news-releases/news-release-details/ies-holdings-reports-fiscal-2026-third-quarter-results-and"
+      }
+    ]
+  },
+  "2026-07-31:RBLX": {
+    "status": "verified",
+    "category": "Earnings",
+    "headline": "Bookings and the next-quarter outlook disappointed",
+    "plainEnglish": "Roblox's second-quarter bookings fell short of expectations and its next-quarter bookings outlook was weaker than investors expected. The market sharply marked down the growth story.",
+    "knownBefore": "Roblox announced on 9 July that results would arrive after the market closed on 30 July. The event was known, but a disappointing result was not.",
+    "unknown": "The reported figures, guidance and size of the market reaction were not knowable in advance.",
+    "predictability": "event_known_direction_uncertain",
+    "publishedAt": "2026-07-30T16:05:00-04:00",
+    "sources": [
+      {
+        "name": "Roblox Q2 2026 results",
+        "url": "https://ir.roblox.com/news/news-details/2026/Roblox-Reports-Second-Quarter-2026-Financial-Results/default.aspx"
+      },
+      {
+        "name": "Roblox Q2 2026 earnings event",
+        "url": "https://ir.roblox.com/events-and-presentations/events/event-details/2026/Roblox-Q2-2026-Earnings-Conference-Call/default.aspx"
+      }
+    ]
+  }
+}
