@@ -152,15 +152,194 @@ The aim is to replace manual share counts and costs with a dependable view of th
 - Add correlation, stress tests, maximum-position guidance, and portfolio drawdown risk.
 - Include transaction costs, tax assumptions, and the cost of holding cash before recommending a change.
 
-## 5. Learning and calibration
+## 5. Recursive learning and calibration
 
-- Save every daily rating, confidence level, evidence set, valuation, and model version exactly as it appeared at the time.
-- Compare signals with later returns, earnings changes, drawdowns, and thesis outcomes.
-- Use point-in-time data and walk-forward tests so future information cannot leak into historical results.
-- Track hit rate, false alarms, missed opportunities, downside after Buy signals, and upside after Sell signals.
-- Measure whether confidence is calibrated—for example, whether High-confidence calls are genuinely more dependable than Medium-confidence calls.
-- Test proposed scoring changes in shadow mode before they affect live recommendations.
-- Keep scoring changes versioned and reviewable; do not allow an opaque model to retrain itself automatically.
+### Current position
+
+Kestrel has the beginnings of a learning record, not yet a learning system:
+
+- ✅ The daily signal journal saves the action, score, confidence, price, reason, timestamp and model version, then performs a first 30-day directional check.
+- ✅ The manager journal saves newly disclosed and increased 13F ideas, then compares their 90-, 180-, and 365-day return with SPY.
+- ✅ The rule-based score remains the approved **champion**. No journal outcome changes its inputs or weights automatically.
+- 🚧 The journals are useful descriptive monitoring, but not valid evidence for changing signals: they do not yet retain full evidence snapshots, use adjusted total returns and delisting proceeds, measure a complete benchmark-relative outcome path, control repeated daily calls, or calculate uncertainty.
+- 🚧 "Confidence" currently describes evidence completeness. It is not a forecast probability and must not be presented as calibrated until it has passed formal calibration tests.
+
+### Non-negotiable design
+
+Learning means controlled evidence accumulation, not autonomous self-retraining. Every model or scoring change must be reproducible, reviewable, shadow-tested and explicitly approved before it changes a live recommendation.
+
+1. Preserve the approved rule-based score as the champion until a challenger passes every gate below.
+2. Keep facts, analyst opinions and model outputs separate. A model may transform evidence; it can never promote its own output into a fact.
+3. Freeze the daily decision snapshot at a documented New York market-time cutoff. Any filing, estimate, corporate action or price arriving later belongs to the next decision session.
+4. Use only information Kestrel could have known at that cutoff. Never join a historical decision to today's revised fundamentals, adjusted universe or consensus estimate.
+5. Retain predictions forever as immutable records. Later outcomes are appended; they never overwrite the original evidence or prediction.
+6. No model may place a trade, override source-quality, identity, liquidity, valuation, concentration or portfolio-risk gates, or move a rating by more than one level on its own.
+
+### The three questions Kestrel must keep separate
+
+| Question | Output | Initial label and horizon |
+|---|---|---|
+| **Big move** | Probability of an unusually large move, regardless of sign | 1- and 5-session event label: absolute cumulative abnormal total return crosses the larger of 5% or twice the ex-ante horizon volatility |
+| **Direction** | Probabilities of outperformance, neutral result and underperformance | 30-, 90-, 180- and 252-session benchmark-relative total return after costs; neutral is inside a pre-declared volatility- and cost-aware band |
+| **Investment-worthiness** | A portfolio recommendation, not a stock-price prediction | Add, hold, reduce or replace only when expected net benefit, downside, evidence quality and marginal portfolio contribution all pass |
+
+A stock can be likely to rise yet still be unsuitable to buy: expected upside may be too small after costs, the downside may be unacceptable, the position may deepen an existing concentration, or a better opportunity may exist. Investment-worthiness is therefore a constrained portfolio decision, not a binary price label.
+
+### Point-in-time evidence layer
+
+Build an immutable, bitemporal evidence ledger. Each raw observation must retain both the period it describes and the moment Kestrel could first have known it.
+
+Required fields for every decision-critical fact:
+
+- permanent issuer, instrument and listing identifiers; ticker is only a convenience label;
+- source, source record ID or SEC accession, source tier and licence;
+- report period, effective time, publication/acceptance time and retrieval time;
+- original value, normalized value, unit, currency, revision/amendment state and quality flags;
+- transformation code version and content hash;
+- the feature set, prediction, decision, model version and later outcome derived from it.
+
+The historical investable universe must retain active and inactive listings, IPOs, mergers, suspensions, delistings, historical identifiers, liquidity screens and point-in-time membership. Return histories must use corporate-action-adjusted total returns and include delisting proceeds. A current ticker list or retrospectively adjusted price series is not sufficient for a backtest.
+
+### Exact learning loop
+
+1. **Ingest and validate.** Collect official filings, prices, corporate actions, estimates and macro releases. Reject unresolved identity, stale price, currency, unit and source conflicts before feature construction.
+2. **Freeze the information set.** Create one immutable daily snapshot after the market-time cutoff, using only observations published by then.
+3. **Build features.** Derive versioned quality, valuation, estimate-revision, event, momentum, risk and portfolio features. Missingness remains visible and reduces confidence.
+4. **Predict with champion and challenger.** Store full probability distributions, uncertainty and rationale for each eligible instrument. Publish only the approved champion.
+5. **Mature outcomes independently.** Measure next-eligible-session entry and later total-return, abnormal-return, drawdown, earnings, thesis and portfolio outcomes from an independent adjusted data source.
+6. **Train only on schedule.** Add matured outcomes to the research set continuously, but retrain challengers no more than quarterly and never alter the live model automatically.
+7. **Validate chronologically.** Use nested, expanding walk-forward tests with at least five outer test periods. Tune inside earlier data only; purge training rows whose outcome window overlaps validation and leave a gap at least as long as the relevant outcome horizon.
+8. **Calibrate separately.** Fit any probability calibrator on a later, separate chronological slice. Start with simple logistic calibration; use more flexible calibration only when sample size supports it.
+9. **Simulate the portfolio decision.** Apply realistic entry delay, transaction costs, taxes, position limits, liquidity, correlations, stress scenarios and turnover before judging investment-worthiness.
+10. **Review and shadow.** Register every experiment and comparison. A challenger must run live in shadow mode before it can receive a capped contribution to a recommendation.
+
+### Event studies
+
+For filings, earnings, guidance, analyst actions, insider trades and major corporate events:
+
+- record the first public timestamp and classify the event type;
+- estimate expected return only from pre-event data, excluding the event window;
+- measure abnormal total return over pre-declared windows such as `[0, 1]`, `[0, 5]` and `[1, 20]` trading sessions;
+- merge or flag overlapping events from the same issuer rather than attributing one price move to several causes;
+- compare results by event type, sector, size, market regime and source quality.
+
+An event study measures market reaction; it does not prove a causal explanation or a future investment return.
+
+### Success measures
+
+**Big-move model**
+
+- precision-recall lift over the unconditional event rate;
+- recall at Kestrel's fixed daily alert budget;
+- Brier score, log loss and reliability plots;
+- false alarms per 100 alerts, broken down by volatility and market regime.
+
+**Direction model**
+
+- Brier score and log loss for outperformance/neutral/underperformance;
+- rank correlation between forecast and later benchmark-relative return;
+- net top-minus-bottom spread, false positives and missed opportunities;
+- clustered confidence intervals by date and issuer.
+
+**Investment-worthiness and portfolio model**
+
+- incremental net return and information ratio versus doing nothing;
+- factor-aware performance, not SPY alone;
+- drawdown, expected shortfall, turnover, tax and transaction-cost drag;
+- marginal contribution to concentration and portfolio risk;
+- realised regret versus the best eligible alternative;
+- stability under base, bear, inflation, recession and liquidity stresses.
+
+Hit rate remains a useful diagnostic, but is never a sufficient success measure.
+
+### Gates before a challenger changes a live signal
+
+1. **Data gate:** complete lineage for every decision-critical field; no unresolved identity or corporate-action break in the eligible universe.
+2. **Reproducibility gate:** rebuilding any prior decision snapshot reproduces the same features and prediction.
+3. **Leakage gate:** automated as-of joins and overlap tests report zero future-information violations.
+4. **Statistical gate:** the challenger improves proper forecast scores over the champion and a simple base-rate benchmark in at least four of five outer walk-forward periods, with uncertainty intervals that do not include zero improvement.
+5. **Calibration gate:** positive Brier skill; calibration slope between 0.8 and 1.2; no material overconfidence by confidence band, market regime or sector.
+6. **Economic gate:** positive incremental portfolio result after conservative costs, without relying only on known factor exposures or a handful of outcomes.
+7. **Robustness gate:** result survives delayed execution, doubled costs, threshold perturbation, removal of the best decile of outcomes and major regime splits.
+8. **Shadow gate:** at least 12 months and 200 matured independent short-horizon forecasts. The 252-session investment model additionally requires at least 100 matured outcomes across two materially different market regimes.
+9. **Deployment gate:** approved human review; initial influence capped at 10% of the evidence score; immediate rollback path to the former champion.
+
+### Phased build
+
+#### Phase A — Make the current journals research-grade
+
+- Make daily prediction records append-only and preserve the full evidence and feature snapshot.
+- Replace snapshot-to-snapshot price checks with independent adjusted total-return outcomes.
+- Record entry convention, benchmark, costs, corporate actions, delisting state and complete maximum drawdown.
+- Evaluate Hold decisions and missed opportunities, not only Buy and Sell calls.
+- Report outcomes separately by model version, horizon, action, confidence band, issuer and decision date.
+
+#### Phase B — Establish an honest historical research dataset
+
+- Build the bitemporal security master and point-in-time universe.
+- Reconstruct US fundamentals from official filing acceptance times and preserve amendments/restatements.
+- Introduce macro-release vintages and historical benchmark/factor data.
+- Re-run the current rule-based champion through leakage-safe walk-forward evaluation before introducing machine learning.
+
+#### Phase C — Create simple, interpretable challengers
+
+- Start with regularised logistic or ordinal models for the separate big-move and direction questions.
+- Use feature ablation to prove which evidence families add value.
+- Introduce probability calibration and uncertainty reports.
+- Do not add more complex models unless they deliver stable out-of-time improvement after all costs and gates.
+
+#### Phase D — Build the portfolio decision layer
+
+- Convert calibrated forecasts into constrained add/hold/reduce/replace proposals.
+- Use shrinkage covariance, factor exposures, neutral market priors and stress testing.
+- Compare candidates with the current portfolio and the best alternative, rather than rewarding an isolated attractive stock.
+
+#### Phase E — Shadow, approve and monitor
+
+- Run challengers daily without affecting displayed actions.
+- Review a monthly model-risk report covering data drift, calibration, realised outcomes, costs, concentration and failures.
+- Permit only gated, capped, reversible live influence after the full shadow period.
+
+### Data-source plan
+
+#### Available now or at low cost
+
+- SEC EDGAR submissions, XBRL Company Facts, Forms 4, 13F and N-PORT for US filings and ownership.
+- ALFRED, Treasury, BLS and BEA releases for macro data vintages.
+- Nasdaq directories and Daily List, exchange notices, SEC Form 25 and OpenFIGI for identity support.
+- Kenneth French factor data for research benchmarks.
+- Current Yahoo, Finnhub and FMP feeds as provisional cross-checks and for prospective snapshot collection.
+- Databento historical pay-as-you-go data and free credits to validate official market-data integration.
+
+This tier is enough to build the evidence ledger, prospective shadow programme and selected US historical reconstruction. It is not enough for a trustworthy broad-universe historical backtest because current aggregator histories may omit dead companies, overwrite fundamental history or apply corporate-action adjustments retrospectively.
+
+#### Paid sources in priority order
+
+1. **Sharadar full US dataset:** first learning-specific purchase. Point-in-time/as-reported fundamentals plus active and delisted US equity coverage materially reduce restatement and survivorship bias.
+2. **Databento security master and corporate actions:** next market-integrity purchase. Point-in-time listing status, identifiers and corporate actions improve returns, identity and delisting treatment.
+3. **FactSet point-in-time consensus or LSEG I/B/E/S:** buy only after an ablation study shows estimate history adds material incremental value. These are the institutional sources for historical estimate revisions and global coverage.
+4. **CRSP plus Compustat Point-in-Time through WRDS:** gold-standard independent US research validation when institutional or academic access is justified; confirm product-redistribution rights before use.
+5. **Benzinga named ratings and Morningstar research:** valuable secondary evidence for event attribution and independent valuation, but not substitutes for a complete point-in-time universe, market or consensus dataset.
+6. **Low-cost delisted-data vendors:** useful for prototyping, but remain provisional until Kestrel has independently validated coverage, timestamps and corporate-action treatment.
+
+### Governance and lineage
+
+- Maintain a model inventory: purpose, owner, scope, inputs, intended use, limitations, version, approval status and rollback version.
+- Maintain an experiment registry covering every feature, threshold, model and portfolio rule tested, including rejected variants.
+- Require independent challenge before promotion: a reviewer verifies point-in-time integrity, labels, code, sample construction, costs and conclusions.
+- Monitor input coverage, source drift, feature drift, prediction drift, calibration, realised downside, turnover and exception rates.
+- Treat a source failure, material restatement, corporate-action mismatch, calibration breach or data-quality incident as a model-risk event requiring documented resolution.
+- Use W3C PROV-style lineage concepts so a user can trace a recommendation through evidence, transformations, model version and outcome.
+
+### Evidence base
+
+- SEC EDGAR APIs: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+- ALFRED real-time vintages: https://fred.stlouisfed.org/docs/api/fred/realtime_period.html
+- MacKinlay, *Event Studies in Economics and Finance*: https://www.bu.edu/econ/files/2011/01/MacKinlay-1996-Event-Studies-in-Economics-and-Finance.pdf
+- CFA Institute, *Investment Model Validation*: https://rpc.cfainstitute.org/sites/default/files/-/media/documents/article/rf-brief/investment-model-validation.pdf
+- Gneiting and Raftery, proper scoring rules: https://sites.stat.washington.edu/people/raftery/Research/PDF/Gneiting2007jasa.pdf
+- Federal Reserve model-risk guidance: https://www.federalreserve.gov/frrs/guidance/supervisory-guidance-on-model-risk-management.htm
+- Shumway, delisting bias: https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1540-6261.1997.tb03818.x
 
 ### Daily Mover Autopsy and recursive opportunity learning
 
