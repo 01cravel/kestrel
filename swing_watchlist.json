@@ -1,188 +1,391 @@
 {
-  "status": "shadow",
-  "title": "Could move sharply this week",
-  "weekEnding": "2026-08-07",
-  "frozenAt": "2026-08-03T17:09:00-04:00",
-  "priceEvidenceThrough": "2026-07-31",
-  "target": "A move of at least 10% more than the S&P 500 by the next close after the event.",
-  "directionPolicy": "Direction unknown. There is not yet a validated model that can honestly call up versus down.",
-  "chanceMethod": "Experimental empirical-Bayes estimate: next-session rises of at least 10% versus SPY after the company's latest 7–8 SEC earnings filings, shrunk toward the 31% pooled rate across these five companies with an eight-event prior weight.",
-  "learnedSetup": {
-    "baseSwingRate": 0.015,
-    "signals": [
-      {
-        "key": "highVolatility",
-        "headline": "8.1×",
-        "plainEnglish": "more 10% moves among highly volatile shares"
-      },
-      {
-        "key": "strongTrend",
-        "headline": "4.1×",
-        "plainEnglish": "more after a 15%+ move in the prior month"
-      },
-      {
-        "key": "volumeBuild",
-        "headline": "2.4×",
-        "plainEnglish": "more when recent trading volume was building"
-      },
-      {
-        "key": "repeatMover",
-        "headline": "83%",
-        "plainEnglish": "of giant-move events came from repeat movers"
-      }
-    ],
-    "warning": "Research result, not a promise: these clues overlap, can point up or down, and are never multiplied into a fake probability. Corporate-action and point-in-time market-value filters are still incomplete."
-  },
+  "asOf": "2026-08-04",
   "candidates": [
     {
+      "annualisedVolatility": 1.491,
+      "asOf": "2026-08-03",
+      "calendarStatus": "projected",
+      "cohort": {
+        "cohortSessions": 1055,
+        "definition": "Sessions in the wild volatility band with scheduled results in the next week.",
+        "jumps": 467,
+        "rate": 0.4427,
+        "sufficient": true
+      },
+      "jumpChance10": 0.4753,
+      "ownRecord": {
+        "jumps": 128,
+        "rate": 0.5079,
+        "sessions": 252
+      },
       "rank": 1,
+      "reactionHistory": {
+        "basis": "Benchmark-relative move on the first session able to respond to each filing.",
+        "eventsMeasured": 8,
+        "largestPercent": 57.36,
+        "limitation": "8 events is far too few to read anything into direction. Only the size of the move is reported.",
+        "multipleOfOrdinaryNight": 1.1,
+        "ordinaryNightPercent": 4.3,
+        "reactions": [
+          {
+            "date": "2024-08-07",
+            "excessReturn": -5.09
+          },
+          {
+            "date": "2024-11-08",
+            "excessReturn": 54.65
+          },
+          {
+            "date": "2025-02-27",
+            "excessReturn": -2.97
+          },
+          {
+            "date": "2025-05-09",
+            "excessReturn": -0.48
+          },
+          {
+            "date": "2025-08-08",
+            "excessReturn": -4.09
+          },
+          {
+            "date": "2025-11-07",
+            "excessReturn": -1.92
+          },
+          {
+            "date": "2026-02-27",
+            "excessReturn": 57.36
+          },
+          {
+            "date": "2026-05-08",
+            "excessReturn": -6.29
+          }
+        ],
+        "smallestPercent": 0.48,
+        "status": "measured",
+        "symbol": "AAOI",
+        "typicalReactionPercent": 4.59
+      },
+      "resultsDue": true,
+      "resultsExpected": "2026-07-27",
+      "resultsPrecision": "wide",
+      "resultsWindow": [
+        "2026-07-15",
+        "2026-08-08"
+      ],
       "symbol": "AAOI",
-      "name": "Applied Optoelectronics",
-      "event": "Second-quarter results and third-quarter outlook",
-      "eventAt": "2026-08-06T16:30:00-04:00",
-      "direction": "Unknown",
-      "jumpChance10": 0.28,
-      "earningsEventsMeasured": 8,
-      "earningsJumpsAbove10": 2,
-      "bigSwingDays252": 55,
-      "annualisedVolatility": 1.42,
-      "return20d": -0.22,
-      "medianDollarVolume20d": 944700000,
-      "volumeBuild": 0.946,
-      "setupSignals": {
-        "scheduledCatalyst": true,
-        "repeatMover": true,
-        "highVolatility": true,
-        "strongTrend": true,
-        "volumeBuild": false
-      },
-      "setupSignalsPassed": 4,
-      "setupSignalsTotal": 5,
-      "whyWatch": "This is the most repeatedly explosive share in the five-name test: 55 benchmark-relative moves above 10% in the last 252 sessions. Earnings provide a dated trigger.",
-      "upsideCase": "AI-network demand and the next-quarter outlook exceed what the market has priced in.",
-      "downsideCase": "Growth or guidance fails to justify the expectations already attached to the AI story.",
-      "sourceName": "Applied Optoelectronics investor relations",
-      "sourceUrl": "https://investors.ao-inc.com/news-releases/news-release-details/applied-optoelectronics-announces-date-second-quarter-2026"
+      "volatilityBand": "wild",
+      "volumeBuild": 0.52
     },
     {
+      "annualisedVolatility": 1.555,
+      "asOf": "2026-08-03",
+      "calendarStatus": "insufficient-history",
+      "cohort": {
+        "cohortSessions": 17077,
+        "definition": "Sessions in the wild volatility band with no scheduled results in the next week.",
+        "jumps": 5922,
+        "rate": 0.3468,
+        "sufficient": true
+      },
+      "jumpChance10": 0.4392,
+      "ownRecord": {
+        "jumps": 134,
+        "rate": 0.5317,
+        "sessions": 252
+      },
       "rank": 2,
-      "symbol": "ALAB",
-      "name": "Astera Labs",
-      "event": "Second-quarter earnings call",
-      "eventAt": "2026-08-04T16:30:00-04:00",
-      "direction": "Unknown",
-      "jumpChance10": 0.28,
-      "earningsEventsMeasured": 8,
-      "earningsJumpsAbove10": 2,
-      "bigSwingDays252": 25,
-      "annualisedVolatility": 1.20,
-      "return20d": -0.234,
-      "medianDollarVolume20d": 1293600000,
-      "volumeBuild": 1.075,
-      "setupSignals": {
-        "scheduledCatalyst": true,
-        "repeatMover": true,
-        "highVolatility": true,
-        "strongTrend": true,
-        "volumeBuild": false
+      "reactionHistory": {
+        "basis": "Benchmark-relative move on the first session able to respond to each filing.",
+        "eventsMeasured": 5,
+        "largestPercent": 15.21,
+        "limitation": "5 events is far too few to read anything into direction. Only the size of the move is reported.",
+        "multipleOfOrdinaryNight": 2.3,
+        "ordinaryNightPercent": 3.1,
+        "reactions": [
+          {
+            "date": "2025-05-08",
+            "excessReturn": 4.14
+          },
+          {
+            "date": "2025-08-15",
+            "excessReturn": -4.35
+          },
+          {
+            "date": "2025-11-07",
+            "excessReturn": 15.21
+          },
+          {
+            "date": "2026-01-30",
+            "excessReturn": 7.15
+          },
+          {
+            "date": "2026-05-01",
+            "excessReturn": 7.98
+          }
+        ],
+        "smallestPercent": 4.14,
+        "status": "measured",
+        "symbol": "SNDK",
+        "typicalReactionPercent": 7.15
       },
-      "setupSignalsPassed": 4,
-      "setupSignalsTotal": 5,
-      "whyWatch": "The shares have produced 25 benchmark-relative 10% moves in the last 252 sessions and fell 23% over the latest measured month. Earnings can resolve whether that fall was excessive or justified.",
-      "upsideCase": "Results beat the company's prior outlook and show that custom AI-connectivity products are ramping quickly.",
-      "downsideCase": "Customer concentration or a slower product ramp weakens the growth story.",
-      "sourceName": "Astera Labs investor relations",
-      "sourceUrl": "https://ir.asteralabs.com/events/event-details/astera-labs-second-quarter-2026-earnings-call"
+      "resultsDue": false,
+      "resultsExpected": null,
+      "resultsPrecision": null,
+      "resultsWindow": null,
+      "symbol": "SNDK",
+      "volatilityBand": "wild",
+      "volumeBuild": 1.169
     },
     {
+      "annualisedVolatility": 1.164,
+      "asOf": "2026-08-03",
+      "calendarStatus": "projected",
+      "cohort": {
+        "cohortSessions": 1055,
+        "definition": "Sessions in the wild volatility band with scheduled results in the next week.",
+        "jumps": 467,
+        "rate": 0.4427,
+        "sufficient": true
+      },
+      "jumpChance10": 0.4376,
+      "ownRecord": {
+        "jumps": 109,
+        "rate": 0.4325,
+        "sessions": 252
+      },
       "rank": 3,
-      "symbol": "IONQ",
-      "name": "IonQ",
-      "event": "Second-quarter results and business outlook",
-      "eventAt": "2026-08-05T16:30:00-04:00",
-      "direction": "Unknown",
-      "jumpChance10": 0.28,
-      "earningsEventsMeasured": 8,
-      "earningsJumpsAbove10": 2,
-      "bigSwingDays252": 17,
-      "annualisedVolatility": 0.82,
-      "return20d": -0.258,
-      "medianDollarVolume20d": 682500000,
-      "volumeBuild": 1.043,
-      "setupSignals": {
-        "scheduledCatalyst": true,
-        "repeatMover": true,
-        "highVolatility": true,
-        "strongTrend": true,
-        "volumeBuild": false
+      "reactionHistory": {
+        "basis": "Benchmark-relative move on the first session able to respond to each filing.",
+        "eventsMeasured": 8,
+        "largestPercent": 36.49,
+        "limitation": "8 events is far too few to read anything into direction. Only the size of the move is reported.",
+        "multipleOfOrdinaryNight": 4.2,
+        "ordinaryNightPercent": 2.94,
+        "reactions": [
+          {
+            "date": "2024-08-07",
+            "excessReturn": -13.71
+          },
+          {
+            "date": "2024-11-05",
+            "excessReturn": 36.49
+          },
+          {
+            "date": "2025-02-11",
+            "excessReturn": -10.97
+          },
+          {
+            "date": "2025-05-07",
+            "excessReturn": -0.8
+          },
+          {
+            "date": "2025-08-06",
+            "excessReturn": 27.9
+          },
+          {
+            "date": "2025-11-05",
+            "excessReturn": 1.12
+          },
+          {
+            "date": "2026-02-11",
+            "excessReturn": -21.39
+          },
+          {
+            "date": "2026-05-06",
+            "excessReturn": -2.22
+          }
+        ],
+        "smallestPercent": 0.8,
+        "status": "measured",
+        "symbol": "ALAB",
+        "typicalReactionPercent": 12.34
       },
-      "setupSignalsPassed": 4,
-      "setupSignalsTotal": 5,
-      "whyWatch": "IonQ has produced 17 benchmark-relative 10% moves in the last year. Its first quarter beat guidance and management raised its full-year revenue range, setting a demanding comparison.",
-      "upsideCase": "Revenue beats the $65–68 million prior range and management raises the $260–270 million full-year outlook again.",
-      "downsideCase": "Commercial progress or cash use disappoints against the very high growth expectations.",
-      "sourceName": "IonQ investor relations",
-      "sourceUrl": "https://investors.ionq.com/news/news-details/2026/IonQ-to-Report-Second-Quarter-2026-Financial-Results-on-August-5-2026/default.aspx"
+      "resultsDue": true,
+      "resultsExpected": "2026-08-04",
+      "resultsPrecision": "approximate",
+      "resultsWindow": [
+        "2026-07-29",
+        "2026-08-10"
+      ],
+      "symbol": "ALAB",
+      "volatilityBand": "wild",
+      "volumeBuild": 0.697
     },
     {
+      "annualisedVolatility": 1.005,
+      "asOf": "2026-08-03",
+      "calendarStatus": "projected",
+      "cohort": {
+        "cohortSessions": 17077,
+        "definition": "Sessions in the wild volatility band with no scheduled results in the next week.",
+        "jumps": 5922,
+        "rate": 0.3468,
+        "sufficient": true
+      },
+      "jumpChance10": 0.4373,
+      "ownRecord": {
+        "jumps": 133,
+        "rate": 0.5278,
+        "sessions": 252
+      },
       "rank": 4,
-      "symbol": "APP",
-      "name": "AppLovin",
-      "event": "Second-quarter results",
-      "eventAt": "2026-08-05T17:00:00-04:00",
-      "direction": "Unknown",
-      "jumpChance10": 0.47,
-      "earningsEventsMeasured": 8,
-      "earningsJumpsAbove10": 5,
-      "bigSwingDays252": 9,
-      "annualisedVolatility": 0.61,
-      "return20d": -0.249,
-      "medianDollarVolume20d": 2361200000,
-      "volumeBuild": 0.976,
-      "setupSignals": {
-        "scheduledCatalyst": true,
-        "repeatMover": true,
-        "highVolatility": false,
-        "strongTrend": true,
-        "volumeBuild": false
+      "reactionHistory": {
+        "basis": "Benchmark-relative move on the first session able to respond to each filing.",
+        "eventsMeasured": 12,
+        "largestPercent": 17.07,
+        "limitation": "12 events is far too few to read anything into direction. Only the size of the move is reported.",
+        "multipleOfOrdinaryNight": 2.6,
+        "ordinaryNightPercent": 3.66,
+        "reactions": [
+          {
+            "date": "2024-11-15",
+            "excessReturn": -8.31
+          },
+          {
+            "date": "2025-01-23",
+            "excessReturn": -12.51
+          },
+          {
+            "date": "2025-03-05",
+            "excessReturn": 17.07
+          },
+          {
+            "date": "2025-05-13",
+            "excessReturn": -2.91
+          },
+          {
+            "date": "2025-07-25",
+            "excessReturn": -9.95
+          },
+          {
+            "date": "2025-08-12",
+            "excessReturn": 7.3
+          },
+          {
+            "date": "2025-10-22",
+            "excessReturn": -8.72
+          },
+          {
+            "date": "2025-11-11",
+            "excessReturn": -1.41
+          },
+          {
+            "date": "2026-02-12",
+            "excessReturn": -13.62
+          },
+          {
+            "date": "2026-03-03",
+            "excessReturn": 7.51
+          },
+          {
+            "date": "2026-05-12",
+            "excessReturn": -11.47
+          },
+          {
+            "date": "2026-07-16",
+            "excessReturn": -16.5
+          }
+        ],
+        "smallestPercent": 1.41,
+        "status": "measured",
+        "symbol": "ASTS",
+        "typicalReactionPercent": 9.34
       },
-      "setupSignalsPassed": 3,
-      "setupSignalsTotal": 5,
-      "whyWatch": "AppLovin has produced nine benchmark-relative 10% moves in the last 252 sessions and was down 25% over the latest measured month. The earnings update is a clear repricing point.",
-      "upsideCase": "Advertising growth, margins and forward commentary show that the recent price fall went too far.",
-      "downsideCase": "Growth or guidance slows while expectations remain demanding.",
-      "sourceName": "AppLovin investor relations",
-      "sourceUrl": "https://investors.applovin.com/news/news-details/2026/AppLovin-to-Announce-Second-Quarter-2026-Results/default.aspx"
+      "resultsDue": false,
+      "resultsExpected": "2026-09-25",
+      "resultsPrecision": "approximate",
+      "resultsWindow": [
+        "2026-09-17",
+        "2026-10-03"
+      ],
+      "symbol": "ASTS",
+      "volatilityBand": "wild",
+      "volumeBuild": 0.488
     },
     {
-      "rank": 5,
-      "symbol": "AMD",
-      "name": "Advanced Micro Devices",
-      "event": "Fiscal second-quarter results",
-      "eventAt": "2026-08-04T17:00:00-04:00",
-      "direction": "Unknown",
-      "jumpChance10": 0.23,
-      "earningsEventsMeasured": 7,
-      "earningsJumpsAbove10": 1,
-      "bigSwingDays252": 7,
-      "annualisedVolatility": 0.86,
-      "return20d": -0.08,
-      "medianDollarVolume20d": 14426400000,
-      "volumeBuild": 1.109,
-      "setupSignals": {
-        "scheduledCatalyst": true,
-        "repeatMover": true,
-        "highVolatility": true,
-        "strongTrend": false,
-        "volumeBuild": false
+      "annualisedVolatility": 1.184,
+      "asOf": "2026-08-03",
+      "calendarStatus": "projected",
+      "cohort": {
+        "cohortSessions": 1055,
+        "definition": "Sessions in the wild volatility band with scheduled results in the next week.",
+        "jumps": 467,
+        "rate": 0.4427,
+        "sufficient": true
       },
-      "setupSignalsPassed": 3,
-      "setupSignalsTotal": 5,
-      "whyWatch": "AMD has produced seven benchmark-relative 10% moves in the last 252 sessions. Recent large AI partnerships make data-centre growth and guidance the decisive evidence.",
-      "upsideCase": "Data-centre growth and the forward outlook confirm that new AI deployments are turning into revenue faster than expected.",
-      "downsideCase": "Export limits, supply costs or guidance show that market expectations ran ahead of near-term earnings.",
-      "sourceName": "AMD investor relations",
-      "sourceUrl": "https://ir.amd.com/news-events/press-releases/detail/1289/amd-to-report-fiscal-second-quarter-2026-financial-results"
+      "jumpChance10": 0.4336,
+      "ownRecord": {
+        "jumps": 107,
+        "rate": 0.4246,
+        "sessions": 252
+      },
+      "rank": 5,
+      "reactionHistory": {
+        "basis": "Benchmark-relative move on the first session able to respond to each filing.",
+        "eventsMeasured": 8,
+        "largestPercent": 20.04,
+        "limitation": "8 events is far too few to read anything into direction. Only the size of the move is reported.",
+        "multipleOfOrdinaryNight": 1.8,
+        "ordinaryNightPercent": 3.33,
+        "reactions": [
+          {
+            "date": "2024-08-12",
+            "excessReturn": -2.67
+          },
+          {
+            "date": "2024-12-03",
+            "excessReturn": -3.97
+          },
+          {
+            "date": "2025-02-07",
+            "excessReturn": 10.07
+          },
+          {
+            "date": "2025-05-09",
+            "excessReturn": 6.12
+          },
+          {
+            "date": "2025-08-11",
+            "excessReturn": -1.79
+          },
+          {
+            "date": "2025-11-26",
+            "excessReturn": 13.1
+          },
+          {
+            "date": "2026-02-06",
+            "excessReturn": 20.04
+          },
+          {
+            "date": "2026-05-12",
+            "excessReturn": -5.65
+          }
+        ],
+        "smallestPercent": 1.79,
+        "status": "measured",
+        "symbol": "CLSK",
+        "typicalReactionPercent": 5.88
+      },
+      "resultsDue": true,
+      "resultsExpected": "2026-08-11",
+      "resultsPrecision": "wide",
+      "resultsWindow": [
+        "2026-07-30",
+        "2026-08-23"
+      ],
+      "symbol": "CLSK",
+      "volatilityBand": "wild",
+      "volumeBuild": 0.918
     }
-  ]
+  ],
+  "chanceMethod": "A measured base rate, not a prediction. Every archived session in the same volatility band and the same scheduled-results state is counted, and the share that produced the move is reported, blended with this security's own record.",
+  "directionPolicy": "No direction is stated. Kestrel can measure how often a security moves sharply; which way it moves at a scheduled announcement is not knowable in advance.",
+  "frozenAt": "2026-08-04T19:10:09Z",
+  "policyVersion": "2026.08.02.1",
+  "radarVersion": "2026.08.1",
+  "securitiesConsidered": 944,
+  "status": "ready",
+  "target": "A benchmark-relative move of 10% or more within one trading week.",
+  "title": "Could move sharply this week",
+  "weekEnding": "2026-08-07"
 }

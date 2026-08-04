@@ -1691,52 +1691,52 @@ function renderSwingWatchlist(payload) {
     els.shadowWatchList.innerHTML = '<div class="empty-card wide"><strong>No shadow list yet</strong><span>Kestrel will not create one after the outcome is known.</span></div>';
     return;
   }
-  const learned = payload?.learnedSetup || {};
-  const learnedSignals = Array.isArray(learned.signals) ? learned.signals : [];
   if (els.shadowLearnings) {
+    const withResults = candidates.filter(item => item.resultsDue).length;
     els.shadowLearnings.innerHTML = `
-      <div class="shadow-learning lead"><strong>${moverPercent(learned.baseSwingRate, 1)}</strong><span>normal daily chance of a 10% move</span></div>
-      ${learnedSignals.map(signal => `<div class="shadow-learning"><strong>${escapeHtml(signal.headline)}</strong><span>${escapeHtml(signal.plainEnglish)}</span></div>`).join('')}
-      <p>${escapeHtml(learned.warning || '')}</p>`;
+      <div class="shadow-learning lead"><strong>${escapeHtml(payload.securitiesConsidered ?? '—')}</strong><span>shares measured this week</span></div>
+      <div class="shadow-learning"><strong>${escapeHtml(withResults)}</strong><span>have results due inside the week</span></div>
+      <div class="shadow-learning"><strong>Either way</strong><span>this measures size of move, never direction</span></div>
+      <p>${escapeHtml(payload.chanceMethod || '')}</p>`;
   }
-  els.shadowWatchSummary.textContent = `Frozen 3 Aug · ${candidates.length} names · price history through ${moverDate(payload.priceEvidenceThrough)}`;
-  const signalLabels = {
-    scheduledCatalyst: 'Dated event',
-    repeatMover: 'Moved big before',
-    highVolatility: 'Usually volatile',
-    strongTrend: 'Strong recent move',
-    volumeBuild: 'Volume building',
-  };
+  els.shadowWatchSummary.textContent =
+    `Frozen ${moverDate(String(payload.frozenAt || '').slice(0, 10)) || payload.asOf} · ${candidates.length} names · measured from ${escapeHtml(payload.securitiesConsidered ?? '')} shares`;
+
   els.shadowWatchList.innerHTML = candidates.map(candidate => {
-    const setupSignals = candidate.setupSignals || {};
-    const setupChips = Object.entries(signalLabels).map(([key, label]) => `
-      <span class="${setupSignals[key] ? 'pass' : 'miss'}"><b aria-hidden="true">${setupSignals[key] ? '✓' : '–'}</b>${escapeHtml(label)}</span>`).join('');
+    const own = candidate.ownRecord || {};
+    const cohort = candidate.cohort || {};
+    const reaction = candidate.reactionHistory || {};
+    const windowEnd = Array.isArray(candidate.resultsWindow) ? candidate.resultsWindow[1] : null;
+    const expected = candidate.resultsExpected;
+    const passed = expected && expected < (candidate.asOf || '');
+    const results = candidate.resultsDue
+      ? (passed && windowEnd
+          ? `Results window open, expected by ${escapeHtml(windowEnd)}`
+          : `Results due ${escapeHtml(expected || 'this week')}${candidate.resultsPrecision ? ` (${escapeHtml(candidate.resultsPrecision)} estimate)` : ''}`)
+      : 'No results scheduled inside the week';
+    const reactionLine = reaction.status === 'measured'
+      ? `Past results moved it ${moverPercent(reaction.typicalReactionPercent / 100, 1)} typically, ${moverPercent(reaction.largestPercent / 100, 1)} at most, over ${escapeHtml(reaction.eventsMeasured)} announcements.`
+      : 'No measured results reactions yet.';
     return `
     <article class="shadow-watch-card">
       <div class="shadow-watch-rank"><span>${escapeHtml(candidate.rank)}</span><small>watch</small></div>
       <div class="shadow-watch-main">
-        <header><strong>${escapeHtml(candidate.symbol)}</strong><span>${escapeHtml(candidate.name)}</span></header>
-        <h3>${escapeHtml(candidate.event)}</h3>
-        <p>${escapeHtml(candidate.whyWatch)}</p>
+        <header><strong>${escapeHtml(candidate.symbol)}</strong><span>${escapeHtml(candidate.volatilityBand)} volatility</span></header>
+        <h3>${escapeHtml(results)}</h3>
+        <p>${escapeHtml(reactionLine)}</p>
         <div class="shadow-setup">
-          <div><strong>${escapeHtml(candidate.setupSignalsPassed)} of ${escapeHtml(candidate.setupSignalsTotal)}</strong><span>big-move clues present</span></div>
-          <div class="shadow-signal-chips">${setupChips}</div>
-          <small>This score is about a sharp move either way—not whether the share will rise.</small>
-        </div>
-        <div class="shadow-watch-cases">
-          <p><b>Could make it jump</b>${escapeHtml(candidate.upsideCase)}</p>
-          <p><b>Could make it fall</b>${escapeHtml(candidate.downsideCase)}</p>
+          <div><strong>${plainPercent((own.rate || 0) * 100, 0)}</strong><span>of its own recent weeks moved this much</span></div>
+          <div><strong>${escapeHtml((cohort.cohortSessions || 0).toLocaleString())}</strong><span>comparable past sessions measured</span></div>
+          <small>This is how often shares in the same state moved sharply—not a view on this share.</small>
         </div>
       </div>
       <aside>
-        <div class="shadow-jump-chance"><strong>${moverPercent(candidate.jumpChance10, 0)}</strong><span>rough chance of rising 10%+</span></div>
-        <strong>${escapeHtml(candidate.direction)}</strong><small>direction</small>
-        <time datetime="${escapeHtml(candidate.eventAt)}">${escapeHtml(eventDate(candidate.eventAt))}</time>
+        <div class="shadow-jump-chance"><strong>${plainPercent((candidate.jumpChance10 || 0) * 100, 0)}</strong><span>measured chance of a 10%+ move either way</span></div>
+        <strong>Not stated</strong><small>direction</small>
         <dl>
-          <div><dt>Earnings jumps</dt><dd>${escapeHtml(candidate.earningsJumpsAbove10)} of ${escapeHtml(candidate.earningsEventsMeasured)}</dd></div>
-          <div><dt>Recent month</dt><dd>${moverPercent(candidate.return20d)}</dd></div>
+          <div><dt>Volatility</dt><dd>${escapeHtml(candidate.annualisedVolatility ?? '—')}</dd></div>
+          <div><dt>Volume build</dt><dd>${escapeHtml(candidate.volumeBuild ?? '—')}</dd></div>
         </dl>
-        <a href="${escapeHtml(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">Verified event</a>
       </aside>
     </article>`;
   }).join('');

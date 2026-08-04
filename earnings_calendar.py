@@ -147,6 +147,45 @@ def _next_weekday(day: dt.date) -> dt.date:
     return following
 
 
+def project_from_dates(dates: Sequence[dt.date], today: dt.date) -> Dict[str, Any]:
+    """Cadence projection from already-known announcement dates.
+
+    Split out so a caller holding stored filing dates can project locally
+    instead of re-requesting every issuer from SEC.
+    """
+    dates = sorted(day for day in dates if day)
+    if len(dates) < MIN_HISTORY_FOR_PROJECTION:
+        return {"status": "insufficient-history", "projection": None}
+    all_gaps = [(later - earlier).days for earlier, later in zip(dates, dates[1:])]
+    low, high = QUARTERLY_GAP_BAND
+    gaps = [gap for gap in all_gaps if low <= gap <= high]
+    if len(gaps) < MIN_GAPS_FOR_CADENCE:
+        return {"status": "irregular-cadence", "projection": None}
+    spread = _interquartile_range(gaps)
+    if spread > MAX_CADENCE_SPREAD_DAYS:
+        return {"status": "irregular-cadence", "projection": None}
+    typical = statistics.median(gaps)
+    last = dates[-1]
+    expected = last + dt.timedelta(days=int(typical))
+    half_width = min(MAX_WINDOW_HALF_WIDTH_DAYS,
+                     max(MIN_WINDOW_HALF_WIDTH_DAYS, int(round(spread / 2)) + 2))
+    earliest, latest = expected - dt.timedelta(days=half_width), expected + dt.timedelta(days=half_width)
+    return {
+        "status": "projected",
+        "lastConfirmed": last.isoformat(),
+        "projection": {
+            "expectedDate": expected.isoformat(),
+            "windowStart": earliest.isoformat(),
+            "windowEnd": latest.isoformat(),
+            "windowHalfWidthDays": half_width,
+            "daysAway": (expected - today).days,
+            "windowIsOpen": earliest <= today <= latest,
+            "overdue": today > latest,
+            "precision": "firm" if half_width <= 5 else "approximate" if half_width <= 9 else "wide",
+        },
+    }
+
+
 def next_expected(symbol: str, today: Optional[dt.date] = None) -> Dict[str, Any]:
     """Project the next announcement window from the confirmed cadence.
 

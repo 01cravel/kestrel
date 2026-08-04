@@ -329,8 +329,14 @@ def _utc(value: str, fallback_date: str) -> str:
 
 
 def store_events(symbol: str, database: Optional[Any] = None,
-                 form4_limit: int = DEFAULT_FORM4_LIMIT) -> Dict[str, Any]:
-    """Fetch and persist insider and filing events for one issuer."""
+                 form4_limit: int = DEFAULT_FORM4_LIMIT,
+                 include_insider: bool = True) -> Dict[str, Any]:
+    """Fetch and persist insider and filing events for one issuer.
+
+    ``include_insider`` off costs a single submissions request, because 8-K
+    item numbers arrive with the index. Insider detail needs one further
+    request per Form 4, so a whole-universe sweep starts without it.
+    """
     import sqlite3
     from pathlib import Path
 
@@ -341,7 +347,8 @@ def store_events(symbol: str, database: Optional[Any] = None,
         return {"status": "no-archive", "symbol": symbol.upper(), "stored": 0}
 
     retrieved = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    insider = insider_transactions(symbol, limit=form4_limit)
+    insider = (insider_transactions(symbol, limit=form4_limit) if include_insider
+               else {"status": "skipped", "cik": None, "filings": []})
     events = filing_events(symbol)
     rows: List[tuple] = []
     ticker = symbol.upper()
