@@ -158,10 +158,11 @@ The aim is to replace manual share counts and costs with a dependable view of th
 
 Kestrel has the beginnings of a learning record, not yet a learning system:
 
-- ✅ The daily signal journal saves the action, score, confidence, price, reason, timestamp and model version, then performs a first 30-day directional check.
-- ✅ The manager journal saves newly disclosed and increased 13F ideas, then compares their 90-, 180-, and 365-day return with SPY.
+- ✅ Both journals are append-only. A prediction is written once, never rewritten by a later submission on the same day, and never pruned by age.
+- ✅ Outcomes are graded independently. `outcome_source.py` reads the archive's split- and dividend-adjusted closes, enters one session after the decision rather than at the decision price, measures the result against SPY over 30, 90 and 180 days, and takes the maximum drawdown from every session in the holding period. A result inside the declared round-trip cost band counts as neither a hit nor a miss.
+- ✅ Kestrel refuses to grade itself. Where the archive cannot cover a prediction, or a corporate action inside the holding period is unresolved, the call is reported as awaiting or not gradeable instead of scored. Manager ideas measured only from Kestrel's own snapshots are shown as provisional and never count toward validation.
 - ✅ The rule-based score remains the approved **champion**. No journal outcome changes its inputs or weights automatically.
-- 🚧 The journals are useful descriptive monitoring, but not valid evidence for changing signals: they do not yet retain full evidence snapshots, use adjusted total returns and delisting proceeds, measure a complete benchmark-relative outcome path, control repeated daily calls, or calculate uncertainty.
+- 🚧 The journals still fall short of evidence for changing signals: they do not yet retain full evidence and feature snapshots, include delisting proceeds, evaluate Hold decisions and missed opportunities, or calculate uncertainty.
 - 🚧 "Confidence" currently describes evidence completeness. It is not a forecast probability and must not be presented as calibrated until it has passed formal calibration tests.
 
 ### Non-negotiable design
@@ -268,11 +269,11 @@ Hit rate remains a useful diagnostic, but is never a sufficient success measure.
 
 #### Phase A — Make the current journals research-grade
 
-- Make daily prediction records append-only and preserve the full evidence and feature snapshot.
-- Replace snapshot-to-snapshot price checks with independent adjusted total-return outcomes.
-- Record entry convention, benchmark, costs, corporate actions, delisting state and complete maximum drawdown.
+- ✅ Make daily prediction records append-only. Preserving the full evidence and feature snapshot remains outstanding.
+- ✅ Replace snapshot-to-snapshot price checks with independent adjusted total-return outcomes.
+- 🚧 Record entry convention, benchmark, costs, corporate actions, delisting state and complete maximum drawdown. Entry convention, benchmark, a declared cost band, corporate-action cleanliness and full-path drawdown are stored; delisting state is not.
 - Evaluate Hold decisions and missed opportunities, not only Buy and Sell calls.
-- Report outcomes separately by model version, horizon, action, confidence band, issuer and decision date.
+- 🚧 Report outcomes separately by model version, horizon, action, confidence band, issuer and decision date. Horizon and confidence band are reported; the remaining breakdowns are outstanding.
 
 #### Phase B — Establish an honest historical research dataset
 

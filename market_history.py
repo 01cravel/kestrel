@@ -266,6 +266,8 @@ class MarketHistoryStore:
             );
             CREATE INDEX IF NOT EXISTS swing_observations_date
                 ON swing_observations(session_date, eligibility_status);
+            CREATE INDEX IF NOT EXISTS swing_observations_ticker_date
+                ON swing_observations(ticker, session_date);
             """
         )
         connection.execute(

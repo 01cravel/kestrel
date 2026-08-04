@@ -2067,27 +2067,38 @@ async function recordInvestorSignals(dashboard, assessments) {
 function renderCalibration(calibration) {
   if (!calibration) return;
   const hasOutcomes = calibration.maturedSignals > 0;
+  const archiveReady = calibration.outcomeSource?.status === 'ready';
   els.calibrationSummary.textContent = hasOutcomes
-    ? `${calibration.maturedSignals} calls have reached their first review date.`
-    : 'Signals are stored exactly as they appeared; outcomes need time.';
+    ? `${calibration.maturedSignals} calls have been graded against SPY using independently adjusted prices.`
+    : archiveReady
+      ? 'Signals are stored exactly as they appeared; outcomes need time.'
+      : 'Signals are stored, but no result can be graded until the adjusted price archive is built.';
   const reviewDate = calibration.firstReviewDate
     ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${calibration.firstReviewDate}T00:00:00Z`))
     : 'After the first actionable call';
+  const excess = calibration.averageExcessReturn;
   els.calibrationGrid.innerHTML = `
     <article>
       <span>Evidence days stored</span>
       <strong>${escapeHtml(calibration.recordedDays)}</strong>
-      <p>${escapeHtml(calibration.signalsRecorded)} point-in-time assessments saved locally.</p>
+      <p>${escapeHtml(calibration.signalsRecorded)} point-in-time assessments saved locally and never rewritten.</p>
     </article>
     <article>
-      <span>30-day hit rate</span>
+      <span>30-day hit rate versus SPY</span>
       <strong>${hasOutcomes && calibration.hitRate !== null ? plainPercent(calibration.hitRate) : 'Not ready'}</strong>
-      <p>${hasOutcomes ? 'Directional Buy and Sell calls only.' : `First review: ${escapeHtml(reviewDate)}.`}</p>
+      <p>${hasOutcomes ? `Average result ${excess === null ? 'unknown' : plainPercent(excess)} against SPY after costs.` : `First review: ${escapeHtml(reviewDate)}.`}</p>
     </article>
     <article>
       <span>High-confidence check</span>
       <strong>${calibration.highConfidenceHitRate !== null ? plainPercent(calibration.highConfidenceHitRate) : 'Not ready'}</strong>
       <p>High confidence must prove more dependable than Medium confidence.</p>
+    </article>
+    <article>
+      <span>Outcome source</span>
+      <strong>${archiveReady ? 'Independent archive' : 'Not available'}</strong>
+      <p>${archiveReady
+        ? `Adjusted closes through ${escapeHtml(calibration.outcomeSource.lastSession)}. Kestrel never grades a call using its own saved prices.`
+        : 'Build the market-history archive to grade past calls. Kestrel will not grade itself.'}</p>
     </article>
     <article>
       <span>Model version</span>
