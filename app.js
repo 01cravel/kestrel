@@ -241,6 +241,7 @@ const state = {
   sarwa: null,
   movers: null,
   swingWatchlist: null,
+  earningsRadar: null,
 };
 
 const els = {
@@ -300,6 +301,12 @@ const els = {
   evidenceDialog: document.getElementById('evidenceDialog'),
   calibrationSummary: document.getElementById('calibrationSummary'),
   calibrationGrid: document.getElementById('calibrationGrid'),
+  learningSummary: document.getElementById('learningSummary'),
+  learningGrid: document.getElementById('learningGrid'),
+  eventSection: document.getElementById('eventSection'),
+  eventSummary: document.getElementById('eventSummary'),
+  eventGrid: document.getElementById('eventGrid'),
+  eventNote: document.getElementById('eventNote'),
   detailDialog: document.getElementById('detailDialog'),
   detailContent: document.getElementById('detailContent'),
   holdingsDialog: document.getElementById('holdingsDialog'),
@@ -1684,52 +1691,58 @@ function renderSwingWatchlist(payload) {
     els.shadowWatchList.innerHTML = '<div class="empty-card wide"><strong>No shadow list yet</strong><span>Kestrel will not create one after the outcome is known.</span></div>';
     return;
   }
-  const learned = payload?.learnedSetup || {};
-  const learnedSignals = Array.isArray(learned.signals) ? learned.signals : [];
   if (els.shadowLearnings) {
+    const withResults = candidates.filter(item => item.resultsDue).length;
     els.shadowLearnings.innerHTML = `
-      <div class="shadow-learning lead"><strong>${moverPercent(learned.baseSwingRate, 1)}</strong><span>normal daily chance of a 10% move</span></div>
-      ${learnedSignals.map(signal => `<div class="shadow-learning"><strong>${escapeHtml(signal.headline)}</strong><span>${escapeHtml(signal.plainEnglish)}</span></div>`).join('')}
-      <p>${escapeHtml(learned.warning || '')}</p>`;
+      <div class="shadow-learning lead"><strong>${escapeHtml(payload.securitiesConsidered ?? '—')}</strong><span>shares measured this week</span></div>
+      <div class="shadow-learning"><strong>${escapeHtml(withResults)}</strong><span>have results due inside the week</span></div>
+      <div class="shadow-learning"><strong>Either way</strong><span>this measures size of move, never direction</span></div>
+      <p>${escapeHtml(payload.chanceMethod || '')}</p>`;
   }
-  els.shadowWatchSummary.textContent = `Frozen 3 Aug · ${candidates.length} names · price history through ${moverDate(payload.priceEvidenceThrough)}`;
-  const signalLabels = {
-    scheduledCatalyst: 'Dated event',
-    repeatMover: 'Moved big before',
-    highVolatility: 'Usually volatile',
-    strongTrend: 'Strong recent move',
-    volumeBuild: 'Volume building',
-  };
+  els.shadowWatchSummary.textContent =
+    `Frozen ${moverDate(String(payload.frozenAt || '').slice(0, 10)) || payload.asOf} · ${candidates.length} names · measured from ${escapeHtml(payload.securitiesConsidered ?? '')} shares`;
+
   els.shadowWatchList.innerHTML = candidates.map(candidate => {
-    const setupSignals = candidate.setupSignals || {};
-    const setupChips = Object.entries(signalLabels).map(([key, label]) => `
-      <span class="${setupSignals[key] ? 'pass' : 'miss'}"><b aria-hidden="true">${setupSignals[key] ? '✓' : '–'}</b>${escapeHtml(label)}</span>`).join('');
+    const own = candidate.ownRecord || {};
+    const cohort = candidate.cohort || {};
+    const reaction = candidate.reactionHistory || {};
+    const windowEnd = Array.isArray(candidate.resultsWindow) ? candidate.resultsWindow[1] : null;
+    const expected = candidate.resultsExpected;
+    const passed = expected && expected < (candidate.asOf || '');
+    const results = candidate.resultsDue
+      ? (passed && windowEnd
+          ? `Results window open, expected by ${escapeHtml(windowEnd)}`
+          : `Results due ${escapeHtml(expected || 'this week')}${candidate.resultsPrecision ? ` (${escapeHtml(candidate.resultsPrecision)} estimate)` : ''}`)
+      : 'No results scheduled inside the week';
+    const reactionLine = reaction.status === 'measured'
+      ? `Past results moved it ${moverPercent(reaction.typicalReactionPercent / 100, 1)} typically, ${moverPercent(reaction.largestPercent / 100, 1)} at most, over ${escapeHtml(reaction.eventsMeasured)} announcements.`
+      : 'No measured results reactions yet.';
+    const timing = candidate.moveTiming;
+    const timingLine = timing
+      ? `${plainPercent(timing.reactionShareOfWeek * 100, 0)} of the week's movement has landed on results day itself — ${escapeHtml(timing.timesAnOrdinaryDay)}× an ordinary day, over ${escapeHtml(timing.events)} announcements.`
+      : 'Not enough announcements to say when the movement lands.';
     return `
     <article class="shadow-watch-card">
       <div class="shadow-watch-rank"><span>${escapeHtml(candidate.rank)}</span><small>watch</small></div>
       <div class="shadow-watch-main">
-        <header><strong>${escapeHtml(candidate.symbol)}</strong><span>${escapeHtml(candidate.name)}</span></header>
-        <h3>${escapeHtml(candidate.event)}</h3>
-        <p>${escapeHtml(candidate.whyWatch)}</p>
+        <header><strong>${escapeHtml(candidate.symbol)}</strong><span>${escapeHtml(candidate.volatilityBand)} volatility</span></header>
+        <h3>${escapeHtml(results)}</h3>
+        <p>${escapeHtml(reactionLine)}</p>
+        <p class="shadow-timing">${escapeHtml(timingLine)}</p>
         <div class="shadow-setup">
-          <div><strong>${escapeHtml(candidate.setupSignalsPassed)} of ${escapeHtml(candidate.setupSignalsTotal)}</strong><span>big-move clues present</span></div>
-          <div class="shadow-signal-chips">${setupChips}</div>
-          <small>This score is about a sharp move either way—not whether the share will rise.</small>
-        </div>
-        <div class="shadow-watch-cases">
-          <p><b>Could make it jump</b>${escapeHtml(candidate.upsideCase)}</p>
-          <p><b>Could make it fall</b>${escapeHtml(candidate.downsideCase)}</p>
+          <div><strong>${timing ? plainPercent(timing.reactionShareOfWeek * 100, 0) : '—'}</strong><span>of the week&rsquo;s move on results day</span></div>
+          <div><strong>${plainPercent((own.rate || 0) * 100, 0)}</strong><span>of its own recent weeks moved this much</span></div>
+          <div><strong>${escapeHtml((cohort.cohortSessions || 0).toLocaleString())}</strong><span>comparable past sessions measured</span></div>
+          <small>This is how often shares in the same state moved sharply—not a view on this share.</small>
         </div>
       </div>
       <aside>
-        <div class="shadow-jump-chance"><strong>${moverPercent(candidate.jumpChance10, 0)}</strong><span>rough chance of rising 10%+</span></div>
-        <strong>${escapeHtml(candidate.direction)}</strong><small>direction</small>
-        <time datetime="${escapeHtml(candidate.eventAt)}">${escapeHtml(eventDate(candidate.eventAt))}</time>
-        <dl>
-          <div><dt>Earnings jumps</dt><dd>${escapeHtml(candidate.earningsJumpsAbove10)} of ${escapeHtml(candidate.earningsEventsMeasured)}</dd></div>
-          <div><dt>Recent month</dt><dd>${moverPercent(candidate.return20d)}</dd></div>
-        </dl>
-        <a href="${escapeHtml(candidate.sourceUrl)}" target="_blank" rel="noopener noreferrer">Verified event</a>
+        <div class="shadow-jump-chance"><strong>${plainPercent((candidate.jumpChance10 || 0) * 100, 0)}</strong><span>measured chance of a 10%+ move either way</span></div>
+        <div class="shadow-tiers">
+          ${(payload.tierLabels || []).map(label => `
+            <div><dt>${escapeHtml(label)}%+</dt><dd>${plainPercent(((candidate.tiers || {})[label] || 0) * 100, 0)}</dd></div>`).join('')}
+        </div>
+        <strong>Not stated</strong><small>direction</small>
       </aside>
     </article>`;
   }).join('');
@@ -1823,6 +1836,7 @@ function calculateAndRender() {
   renderSuperinvestors(dashboard, assessments, candidateAssessments);
   renderOpportunities(dashboard);
   renderChanges(dashboard);
+  renderEarningsRadar();
   recordDailySignals(dashboard, [...Object.values(assessments), ...candidateAssessments]);
   recordInvestorSignals(dashboard, [...Object.values(assessments), ...candidateAssessments]);
   ensureBenchmarkPerformance(ownedSymbols);
@@ -2064,30 +2078,153 @@ async function recordInvestorSignals(dashboard, assessments) {
   }
 }
 
+async function loadEarningsRadar() {
+  if (!els.eventGrid) return;
+  try {
+    const response = await fetch('/api/earnings-radar');
+    const radar = await response.json();
+    if (!response.ok) throw new Error(radar.message || 'The filing calendar is unavailable');
+    state.earningsRadar = radar;
+    renderEarningsRadar();
+  } catch (error) {
+    els.eventSection.hidden = false;
+    els.eventSummary.textContent = 'The filing calendar is temporarily unavailable.';
+    els.eventGrid.innerHTML = `<div class="empty-card wide"><strong>Not available</strong><span>${escapeHtml(error.message)}</span></div>`;
+  }
+}
+
+function whenLabel(days) {
+  if (days <= 0) return 'Today or already reported';
+  if (days === 1) return 'Tomorrow';
+  return `In ${days} days`;
+}
+
+function renderEarningsRadar() {
+  const radar = state.earningsRadar;
+  if (!radar || !els.eventGrid) return;
+  const events = (radar.events || []).map(event => {
+    const shares = number(state.positions[event.symbol]?.shares) || 0;
+    const price = number(state.assessments?.[event.symbol]?.metrics?.currentPrice) || 0;
+    const value = shares * price;
+    const typical = number(event.reaction?.typicalReactionPercent);
+    return { ...event, value, owned: value > 0, typical, exposure: value && typical ? value * typical / 100 : null };
+  }).sort((a, b) => (b.exposure || 0) - (a.exposure || 0) || a.daysAway - b.daysAway);
+
+  if (!events.length) {
+    els.eventSection.hidden = true;
+    return;
+  }
+  els.eventSection.hidden = false;
+
+  const owned = events.filter(event => event.owned);
+  const totalExposure = owned.reduce((sum, event) => sum + (event.exposure || 0), 0);
+  els.eventSummary.textContent = owned.length
+    ? `${owned.length} of your holdings report within ${radar.horizonDays} days. A typical reaction moves about ${money(totalExposure)} of your money.`
+    : `${events.length} watched companies report within ${radar.horizonDays} days. You hold none of them.`;
+
+  els.eventGrid.innerHTML = events.slice(0, 8).map(event => {
+    const reaction = event.reaction || {};
+    const size = event.typical
+      ? `${plainPercent(event.typical)} typical reaction, ${reaction.multipleOfOrdinaryNight || '?'}× a normal night`
+      : 'No measured reaction history';
+    const exposure = event.owned && event.exposure
+      ? `Your ${money(event.value)} position typically moves <strong>${money(event.exposure)}</strong> on the day.`
+      : 'Not currently held.';
+    const confidence = event.windowIsOpen
+      ? `Window open now (${escapeHtml(event.windowStart)} to ${escapeHtml(event.windowEnd)}).`
+      : `Expected ${escapeHtml(event.expectedDate)}, give or take ${escapeHtml(event.windowHalfWidthDays)} days.`;
+    return `
+    <article class="${event.owned ? 'event-owned' : ''}">
+      <span>${escapeHtml(event.symbol)}${event.owned ? ' · held' : ''}</span>
+      <strong>${escapeHtml(whenLabel(event.daysAway))}</strong>
+      <p>${escapeHtml(size)}. ${exposure} ${confidence}</p>
+    </article>`;
+  }).join('');
+
+  els.eventNote.textContent =
+    'Dates are estimated from each company’s past SEC filing cadence, not an announced diary. '
+    + 'Sizes are what past results moved; direction is not stated and is not knowable in advance.';
+}
+
+async function loadLearningStatus() {
+  if (!els.learningGrid) return;
+  try {
+    const response = await fetch('/api/learning');
+    const learning = await response.json();
+    if (!response.ok) throw new Error(learning.message || 'The research record is unavailable');
+    renderLearning(learning);
+  } catch (error) {
+    els.learningSummary.textContent = 'The research record is temporarily unavailable.';
+    els.learningGrid.innerHTML = `<div class="empty-card wide"><strong>Not available</strong><span>${escapeHtml(error.message)}</span></div>`;
+  }
+}
+
+function renderLearning(learning) {
+  if (!learning) return;
+  const registry = learning.registry || {};
+  const shadow = learning.shadow || {};
+  const ready = learning.status === 'ready';
+  els.learningSummary.textContent = ready
+    ? 'Candidate models are tested on history and run unseen before they may say anything.'
+    : 'No adjusted price archive yet, so nothing can be trained or tested.';
+  els.learningGrid.innerHTML = `
+    <article>
+      <span>Influence on your ratings</span>
+      <strong>${registry.approvedModels ? `${escapeHtml(registry.approvedModels)} approved` : 'None'}</strong>
+      <p>${escapeHtml(registry.liveInfluence || 'No model influences a live recommendation.')}</p>
+    </article>
+    <article>
+      <span>Experiments recorded</span>
+      <strong>${escapeHtml(registry.experiments ?? 0)}</strong>
+      <p>${escapeHtml(registry.passedExperiments ?? 0)} passed every gate. Failed runs are kept too.</p>
+    </article>
+    <article>
+      <span>Unseen shadow predictions</span>
+      <strong>${escapeHtml(shadow.predictions ?? 0)}</strong>
+      <p>${shadow.sessions ? `${escapeHtml(shadow.sessions)} sessions recorded and frozen.` : 'None recorded yet.'} Never shown as an action.</p>
+    </article>
+    <article>
+      <span>What decides your ratings</span>
+      <strong>The rule-based score</strong>
+      <p>${escapeHtml(learning.champion || '')}</p>
+    </article>`;
+}
+
 function renderCalibration(calibration) {
   if (!calibration) return;
   const hasOutcomes = calibration.maturedSignals > 0;
+  const archiveReady = calibration.outcomeSource?.status === 'ready';
   els.calibrationSummary.textContent = hasOutcomes
-    ? `${calibration.maturedSignals} calls have reached their first review date.`
-    : 'Signals are stored exactly as they appeared; outcomes need time.';
+    ? `${calibration.maturedSignals} calls have been graded against SPY using independently adjusted prices.`
+    : archiveReady
+      ? 'Signals are stored exactly as they appeared; outcomes need time.'
+      : 'Signals are stored, but no result can be graded until the adjusted price archive is built.';
   const reviewDate = calibration.firstReviewDate
     ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${calibration.firstReviewDate}T00:00:00Z`))
     : 'After the first actionable call';
+  const excess = calibration.averageExcessReturn;
   els.calibrationGrid.innerHTML = `
     <article>
       <span>Evidence days stored</span>
       <strong>${escapeHtml(calibration.recordedDays)}</strong>
-      <p>${escapeHtml(calibration.signalsRecorded)} point-in-time assessments saved locally.</p>
+      <p>${escapeHtml(calibration.signalsRecorded)} point-in-time assessments saved locally and never rewritten.</p>
     </article>
     <article>
-      <span>30-day hit rate</span>
+      <span>30-day hit rate versus SPY</span>
       <strong>${hasOutcomes && calibration.hitRate !== null ? plainPercent(calibration.hitRate) : 'Not ready'}</strong>
-      <p>${hasOutcomes ? 'Directional Buy and Sell calls only.' : `First review: ${escapeHtml(reviewDate)}.`}</p>
+      <p>${hasOutcomes ? `Average result ${excess === null ? 'unknown' : plainPercent(excess)} against SPY after costs.` : `First review: ${escapeHtml(reviewDate)}.`}</p>
     </article>
     <article>
       <span>High-confidence check</span>
       <strong>${calibration.highConfidenceHitRate !== null ? plainPercent(calibration.highConfidenceHitRate) : 'Not ready'}</strong>
       <p>High confidence must prove more dependable than Medium confidence.</p>
+    </article>
+    <article>
+      <span>Outcome source</span>
+      <strong>${archiveReady ? 'Independent archive' : 'Not available'}</strong>
+      <p>${archiveReady
+        ? `Adjusted closes through ${escapeHtml(calibration.outcomeSource.lastSession)}. Kestrel never grades a call using its own saved prices.`
+        : 'Build the market-history archive to grade past calls. Kestrel will not grade itself.'}</p>
     </article>
     <article>
       <span>Model version</span>
@@ -3124,6 +3261,8 @@ async function startKestrel() {
   fetchSarwaStatus();
   fetchSwingWatchlist();
   fetchMovers();
+  loadLearningStatus();
+  loadEarningsRadar();
   fetchDashboard();
 }
 
