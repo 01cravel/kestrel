@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-05T00:00:00Z",
+  "cases": [
+    {
+      "id": "atkr-sale-process-2026",
+      "symbol": "ATKR",
+      "name": "Atkore Inc.",
+      "cik": "0001666138",
+      "category": "Potential acquisition",
+      "currentStage": "confirmed",
+      "headline": "A public sale process became a named takeover report before the cash deal was confirmed",
+      "plainEnglish": "Atkore was not an unforeseeable bolt from the blue. Activist pressure and a public sale process made a takeover possible months earlier. A Sunday report of advanced talks made the risk immediate before Monday trading, while the buyer's $95 price remained unknown until confirmation.",
+      "whatWasKnowable": "A sale was being explored, Prysmian had publicly said it wanted a roughly $4 billion acquisition, and a report attributed to Bloomberg named Prysmian as being in advanced talks before Monday's market opened.",
+      "whatWasNotKnowable": "Whether talks would complete, the final buyer, the $95 cash price, regulatory conditions and the size of the share-price reaction.",
+      "marketAccess": "The named-talks report appeared while the regular U.S. market was closed. The definitive SEC filing arrived at 6:04 a.m. ET during pre-market trading, 3 hours 25 minutes before the regular open.",
+      "monitorSince": "2025-09-30T16:00:00Z",
+      "researchOnly": true,
+      "timeline": [
+        {
+          "stage": "possible",
+          "publishedAt": "2025-09-30T16:00:00Z",
+          "headline": "Activist investor pushed Atkore to pursue a sale",
+          "detail": "A public activist campaign put a sale on the board's agenda. That created event risk, but did not identify a buyer or prove a transaction would happen.",
+          "evidenceStatus": "verified",
+          "source": {
+            "name": "Bloomberg: Irenic builds stake and pushes for sale",
+            "url": "https://news.bloomberglaw.com/privacy-and-data-security/irenic-is-said-to-build-stake-in-atkore-push-for-a-sale"
+          }
+        },
+        {
+          "stage": "developing",
+          "publishedAt": "2025-11-19T15:27:00Z",
+          "headline": "Atkore was reported to be exploring a potential sale",
+          "detail": "The situation moved from an activist request to a reported company sale process. A transaction was now plausible, but timing and terms were still open.",
+          "evidenceStatus": "verified",
+          "source": {
+            "name": "Bloomberg: Atkore explores potential sale",
+            "url": "https://www.bloomberg.com/news/articles/2025-11-19/atkore-explores-potential-sale-amid-pressure-from-activist-irenic"
+          }
+        },
+        {
+          "stage": "imminent",
+          "publishedAt": "2026-08-02T12:00:00Z",
+          "headline": "A weekend report named Prysmian in advanced talks",
+          "detail": "The report materially increased the likelihood of a near-term deal before U.S. pre-market trading began, but no direct publisher timestamp or deal terms have yet been preserved in Kestrel.",
+          "evidenceStatus": "provisional",
+          "source": {
+            "name": "Report attributed to Bloomberg; direct record pending",
+            "url": "https://www.reddit.com/r/Wiseek/comments/1vdr2c0/atkr_prysmian_in_advanced_talks_to_acquire_atkore/"
+          }
+        },
+        {
+          "stage": "confirmed",
+          "publishedAt": "2026-08-03T10:04:52Z",
+          "headline": "Prysmian agreed to acquire Atkore for $95 a share in cash",
+          "detail": "The signed agreement fixed a clear cash value and confirmed the catalyst during pre-market trading.",
+          "evidenceStatus": "verified",
+          "accessionNumber": "0001666138-26-000016",
+          "source": {
+            "name": "Atkore merger agreement filing",
+            "url": "https://www.sec.gov/Archives/edgar/data/1666138/000166613826000016/atkr-20260803.htm"
+          }
+        }
+      ]
+    }
+  ]
+}

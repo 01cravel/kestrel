@@ -240,6 +240,7 @@ const state = {
   detailPerformanceRequest: null,
   sarwa: null,
   movers: null,
+  catalystWatch: null,
   swingWatchlist: null,
 };
 
@@ -261,6 +262,8 @@ const els = {
   changesList: document.getElementById('changesList'),
   moversSummary: document.getElementById('moversSummary'),
   moversList: document.getElementById('moversList'),
+  catalystWatchSummary: document.getElementById('catalystWatchSummary'),
+  catalystWatchList: document.getElementById('catalystWatchList'),
   shadowWatchSummary: document.getElementById('shadowWatchSummary'),
   shadowLearnings: document.getElementById('shadowLearnings'),
   shadowWatchList: document.getElementById('shadowWatchList'),
@@ -1664,6 +1667,73 @@ async function fetchMovers() {
   } catch (error) {
     if (els.moversSummary) els.moversSummary.textContent = 'Mover research is temporarily unavailable.';
     if (els.moversList) els.moversList.innerHTML = '<div class="empty-card wide"><strong>Mover research could not load</strong><span>Keep the local data service running, then refresh.</span></div>';
+    console.error(error);
+  }
+}
+
+function catalystTime(value) {
+  if (!value) return 'Time unavailable';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/New_York', timeZoneName: 'short',
+  }).format(new Date(value));
+}
+
+function renderCatalystWatch(payload) {
+  if (!els.catalystWatchList || !els.catalystWatchSummary) return;
+  const cases = Array.isArray(payload?.cases) ? payload.cases : [];
+  if (!cases.length) {
+    els.catalystWatchSummary.textContent = payload?.message || 'No catalyst cases are being tracked yet.';
+    els.catalystWatchList.innerHTML = '<div class="empty-card wide"><strong>No public event trail yet</strong><span>Add a timestamped issuer, regulator or credible-news source before escalating a case.</span></div>';
+    return;
+  }
+  const liveChecked = cases.filter(item => item.liveSec?.status === 'checked').length;
+  els.catalystWatchSummary.textContent = `${cases.length} tracked case${cases.length === 1 ? '' : 's'} · ${liveChecked} live SEC check${liveChecked === 1 ? '' : 's'} · no automatic trades`;
+  els.catalystWatchList.innerHTML = cases.map(item => {
+    const timeline = Array.isArray(item.timeline) ? item.timeline : [];
+    const liveFilings = Array.isArray(item.liveSec?.newFilings) ? item.liveSec.newFilings : [];
+    const timelineHtml = timeline.map(point => `
+      <li data-stage="${escapeHtml(point.stage)}" data-evidence="${escapeHtml(point.evidenceStatus)}">
+        <div class="catalyst-node" aria-hidden="true"></div>
+        <div class="catalyst-evidence">
+          <div><span>${escapeHtml(point.stage)}</span><time datetime="${escapeHtml(point.publishedAt)}">${escapeHtml(catalystTime(point.publishedAt))}</time></div>
+          <strong>${escapeHtml(point.headline)}</strong>
+          <p>${escapeHtml(point.detail)}</p>
+          <a href="${escapeHtml(point.source?.url || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(point.source?.name || 'Open evidence')}</a>
+          ${point.evidenceStatus === 'provisional' ? '<em>Provisional · does not escalate automatically</em>' : ''}
+        </div>
+      </li>`).join('');
+    const liveHtml = liveFilings.length
+      ? `<div class="catalyst-live"><strong>New SEC evidence to review</strong>${liveFilings.map(filing => `<a href="${escapeHtml(filing.url)}" target="_blank" rel="noopener noreferrer"><span>${escapeHtml(filing.form)}</span>${escapeHtml(catalystTime(filing.acceptedAt))}</a>`).join('')}<small>Detected filings never change the stage until their contents are verified.</small></div>`
+      : `<div class="catalyst-live is-clear"><strong>Live SEC check</strong><span>${item.liveSec?.status === 'checked' ? 'No unreviewed material filing found.' : 'Live check is temporarily unavailable.'}</span></div>`;
+    return `
+      <article class="catalyst-watch-card" data-stage="${escapeHtml(item.currentStage)}">
+        <header>
+          <div class="catalyst-identity"><span>${escapeHtml(item.category)}</span><strong>${escapeHtml(item.symbol)}</strong><small>${escapeHtml(item.name)}</small></div>
+          <div class="catalyst-headline"><span>Current stage · ${escapeHtml(item.currentStage)}</span><h3>${escapeHtml(item.headline)}</h3><p>${escapeHtml(item.plainEnglish)}</p></div>
+          <b>Research only</b>
+        </header>
+        <ol class="catalyst-timeline" aria-label="${escapeHtml(item.symbol)} public evidence timeline">${timelineHtml}</ol>
+        <div class="catalyst-boundary">
+          <div><strong>Knowable beforehand</strong><p>${escapeHtml(item.whatWasKnowable)}</p></div>
+          <div><strong>Still unknowable</strong><p>${escapeHtml(item.whatWasNotKnowable)}</p></div>
+          <div><strong>Market access</strong><p>${escapeHtml(item.marketAccess)}</p></div>
+        </div>
+        ${liveHtml}
+      </article>`;
+  }).join('');
+}
+
+async function fetchCatalystWatch() {
+  try {
+    const response = await fetch('/api/catalyst-watch', { cache: 'no-store' });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || 'Catalyst Watch could not be loaded');
+    state.catalystWatch = payload;
+    renderCatalystWatch(payload);
+  } catch (error) {
+    if (els.catalystWatchSummary) els.catalystWatchSummary.textContent = 'Catalyst Watch is temporarily unavailable.';
+    if (els.catalystWatchList) els.catalystWatchList.innerHTML = '<div class="empty-card wide"><strong>Public event trail unavailable</strong><span>Keep the local evidence service running, then refresh.</span></div>';
     console.error(error);
   }
 }
@@ -3123,6 +3193,7 @@ async function startKestrel() {
   await syncPortfolioFromServer();
   fetchSarwaStatus();
   fetchSwingWatchlist();
+  fetchCatalystWatch();
   fetchMovers();
   fetchDashboard();
 }

@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 from analyst_data import fetch_analyst_intelligence
 from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
+from catalyst_watch import catalyst_watch_snapshot
 from investor_history import investor_calibration_summary, record_investor_ideas
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
 from mover_autopsy import mover_snapshot
@@ -558,6 +559,9 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/movers":
             self.send_json(mover_snapshot())
+            return
+        if parsed.path == "/api/catalyst-watch":
+            self.send_json(catalyst_watch_snapshot())
             return
         if parsed.path == "/api/swing-watchlist":
             self.send_json(swing_watchlist_snapshot())
