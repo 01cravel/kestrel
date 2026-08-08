@@ -10,6 +10,7 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 4. No single commercial aggregator is a source of truth for prices, fundamentals, estimates, and corporate actions at the same time.
 5. Models transform evidence; they do not become evidence. Every model output carries its version, assumptions, input snapshot, uncertainty, and later outcome.
 6. Kestrel must refuse a confident rating when a required gate fails.
+7. Company guidance remains an issuer claim, not a reported result. Preserve the exact published range; never manufacture a midpoint, silently translate currency, or compare unlike periods or definitions.
 
 ## Hierarchy
 
@@ -31,6 +32,7 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 | Live and closing prices | CTA/CQ and UTP SIP data; official exchange/consolidated closes | Confirm the latest price independently; reject stale, wrong-currency or split-broken series | Yahoo adjusted daily closes are cross-checked against Finnhub. Databento pay-as-you-go Nasdaq NLS+ closes are the next optional upgrade; no monthly subscription is required |
 | Corporate actions and total return | Exchange/issuer notices plus DTCC, normalized by a validated point-in-time service | Splits, dividends, mergers, symbol changes and delistings must be applied before return or risk calculations | Public split events and adjusted histories are checked for unexplained discontinuities. Premium point-in-time reference data stays locked until its measured value exceeds its cost |
 | Analyst expectations | Named analyst actions and long-lived point-in-time contributor estimates | Estimates are opinions. Preserve analyst, firm, rating and target change, date and track record; require at least three firms and an independent consensus check | FMP/Finnhub anonymous consensus is provisional. Benzinga named-ratings adapter is ready to connect; Morningstar independent fair value is the preferred separate valuation check if affordable |
+| Company guidance and earnings releases | SEC-filed issuer release or a publication on a verified official investor-relations domain | Retain the exact SEC acceptance or IR publication timestamp, metric definition, fiscal period, endpoints, unit, currency and original wording. Compare only an identical metric/definition/period/unit/currency key. Conflicts, missing timestamps and ambiguous units fail closed; no midpoint is inferred | On-demand 8-K/6-K filing-package ingestion and deterministic range comparison are connected at `/api/guidance`. Non-filed IR releases require a verified issuer domain and timezone-bearing publication timestamp |
 | Proven-investor holdings | SEC Form 13F filing and information table | Use disclosed changes and portfolio conviction to discover research candidates; never treat delayed ownership as a Buy signal | Direct latest-versus-prior 13F comparison connected for eight deliberately selected long-equity managers, with CUSIP-to-ticker identity checks |
 | ETF holdings and fees | Issuer holdings/prospectus plus SEC Form N-PORT | Verify look-through exposure, fee, derivatives, cash and reporting lag | Planned |
 | Rates, inflation and economy | Original agency releases; FRED/ALFRED for series metadata and vintages | Backtests use the data vintage available on the decision date | Planned |
@@ -44,6 +46,7 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 - The current price is fresh and confirmed independently within tolerance.
 - The latest official filing is present, current and free of material conflict.
 - Every critical metric has complete provenance.
+- Company guidance is conflict-free and clearly separated from later actual results and analyst opinion.
 
 ### Buy
 
@@ -74,6 +77,8 @@ No asset receives a target weight unless:
 - the result is stable when inputs are perturbed.
 
 The first risk engine will use Ledoit–Wolf shrinkage rather than an uncorrected sample covariance matrix. Expected returns will begin from a neutral market prior and admit Kestrel’s views only in proportion to evidence confidence, following the spirit of Black–Litterman. No optimiser output may trade automatically.
+
+Company guidance may update a plain-English thesis, but it cannot override valuation, identity, liquidity, evidence-quality, concentration, or portfolio-risk gates. A raised range is not itself a Buy signal; a lowered range is not itself a Sell signal.
 
 ## Primary references
 
