@@ -43,6 +43,16 @@ ambiguous terms and conflicts append `missing` or `conflict` states and keep the
 fold closed. Reprocessing identical evidence is idempotent; a correction adds a
 new recorded-time version and never changes the old one.
 
+The operational boundary is fail closed too. Before the daily workflow appends
+anything, it verifies SQLite and foreign-key integrity, the exact schema and
+migration chain, every immutable trigger, JSON payload hash, content address and
+snapshot manifest. It repeats that deterministic audit after the transaction and
+only then publishes a consistent online backup. Backups are content-addressed,
+standalone from WAL and verified before use. Recovery is a separate command that
+requires the expected ledger identity and a new empty target; it cannot replace the
+live ledger. Hash, identity, schema, WAL-state or recovery-root disagreement blocks
+restore. See [LEDGER_OPERATIONS.md](LEDGER_OPERATIONS.md) for the operator procedure.
+
 ## Chronological test
 
 - Train on at least 36 months available before the decision cutoff.
