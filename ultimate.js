@@ -287,7 +287,9 @@ function renderDcf(dcf = {}) {
     const record = companies[company.symbol] || {};
     const reported = record.reportedView || {};
     const ownerCash = record.ownerCashView || {};
+    const fcfe = record.fcfeView || {};
     const investment = record.investmentModel || {};
+    const financing = record.financingEvidence || {};
     const evidence = investment.evidence || {};
     const scenarios = Object.fromEntries((ownerCash.scenarios || []).map(item => [item.id, item]));
     const row = document.createElement('div');
@@ -319,6 +321,14 @@ function renderDcf(dcf = {}) {
       reportedCell.innerHTML = '<strong>—</strong><small>Reported cash not positive or history too short</small>';
     }
 
+    const fcfeCell = document.createElement('div');
+    if (record.equityReady && number(fcfe.rangeLow) !== null && number(fcfe.rangeHigh) !== null) {
+      const borrowing = number(fcfe.normalizedNetBorrowingPerShare);
+      fcfeCell.innerHTML = `<strong>$${Number(fcfe.rangeLow).toFixed(2)}–$${Number(fcfe.rangeHigh).toFixed(2)}</strong><small>${borrowing < 0 ? `$${Math.abs(borrowing).toFixed(2)}/share normalized repayment` : 'No perpetual credit for borrowing'}</small>`;
+    } else {
+      fcfeCell.innerHTML = `<strong>—</strong><small>${fcfe.message || 'Financing evidence incomplete'}</small>`;
+    }
+
     const splitCell = document.createElement('div');
     splitCell.className = 'dcf-driver';
     const maintenance = investment.maintenanceRange || [];
@@ -341,13 +351,35 @@ function renderDcf(dcf = {}) {
     } else {
       evidenceCell.innerHTML = `<strong>Missing</strong><small>${investment.message || 'No dated issuer evidence'}</small>`;
     }
-    row.append(companyCell, priceCell, reportedCell, scenarioCell('downside'), scenarioCell('base'), scenarioCell('strong'), splitCell, evidenceCell);
+    const financingDetail = document.createElement('small');
+    if (financing.ready) {
+      const cash = compactMoney.format(Number(financing.cash?.value || 0));
+      const debt = compactMoney.format(Number(financing.debt?.value || 0));
+      const leases = compactMoney.format(Number(financing.leases?.value || 0));
+      const minority = compactMoney.format(Number(financing.minorityInterests?.value || 0));
+      const borrowing = compactMoney.format(Number(financing.netBorrowing?.value || 0));
+      financingDetail.textContent = `Filed balance: cash ${cash} · debt ${debt} · leases ${leases} · outside equity ${minority}. TTM net borrowing ${borrowing}; claims are not deducted twice.`;
+    } else {
+      financingDetail.textContent = `Equity view closed · ${financing.message || 'complete same-period financing facts are missing'}`;
+    }
+    if (financing.sourceUrl) {
+      const financingLink = document.createElement('a');
+      financingLink.href = financing.sourceUrl;
+      financingLink.target = '_blank';
+      financingLink.rel = 'noopener noreferrer';
+      financingLink.textContent = financing.ready ? 'Complete · SEC financing facts' : 'Incomplete · SEC financing facts';
+      evidenceCell.append(financingLink, financingDetail);
+    } else {
+      evidenceCell.append(financingDetail);
+    }
+    row.append(companyCell, priceCell, reportedCell, scenarioCell('downside'), scenarioCell('base'), scenarioCell('strong'), fcfeCell, splitCell, evidenceCell);
     return row;
   });
   document.getElementById('dcfRows').replaceChildren(...rows);
   const normalized = Number(dcf.normalizedCompaniesReady || 0);
   const reported = Number(dcf.reportedCompaniesReady || 0);
-  setStatus(document.getElementById('dcfStatus'), `${normalized}/8 owner-cash · ${reported}/8 reported`, dcf.complete ? 'ready' : 'limited');
+  const equity = Number(dcf.equityCompaniesReady || 0);
+  setStatus(document.getElementById('dcfStatus'), `${equity}/8 FCFE · ${normalized}/8 owner-cash · ${reported}/8 reported`, dcf.complete && dcf.equityEvidenceComplete ? 'ready' : 'limited');
   const riskFree = dcf.riskFreeEvidence || {};
   const riskFreeText = number(riskFree.valuePct) !== null
     ? ` Risk-free anchor: ${Number(riskFree.valuePct).toFixed(2)}%${riskFree.date ? ` on ${riskFree.date}` : ' conservative floor'}.`
@@ -473,6 +505,60 @@ function renderScienceGates(payload) {
   document.getElementById('scienceGateList').replaceChildren(...rows);
 }
 
+function renderWalkForward(payload) {
+  const result = payload.walkForward || {};
+  const metrics = result.metrics?.challenger || {};
+  const eligible = result.eligible === true;
+  const blocked = result.status === 'blocked';
+  setStatus(
+    document.getElementById('walkForwardStatus'),
+    eligible ? 'Evidence passed' : blocked ? 'Integrity gate closed' : 'Evidence too weak',
+    eligible ? 'ready' : 'limited'
+  );
+  document.getElementById('walkForwardWindows').textContent = `${result.windowCount || 0} / ${result.minimumWindows || 5}`;
+  document.getElementById('walkForwardReturn').textContent = sciencePercent(metrics.annualReturn);
+  document.getElementById('walkForwardDrawdown').textContent = sciencePercent(metrics.maxDrawdown);
+  document.getElementById('walkForwardRisk').textContent = number(metrics.informationRatioVsBenchmark) === null
+    ? '—'
+    : Number(metrics.informationRatioVsBenchmark).toFixed(2);
+  const failures = result.failures || [];
+  document.getElementById('walkForwardSummary').textContent = eligible
+    ? `The challenger beat Candidate 1 in ${result.candidateWins} windows and VT in ${result.benchmarkWins}, after declared costs.`
+    : failures[0] || 'The challenger has not earned promotion on genuinely unseen evidence.';
+
+  const rows = (result.windows || []).map(window => {
+    const passed = Number(window.versusCandidate) > 0 && Number(window.versusBenchmark) > 0;
+    const row = document.createElement('article');
+    row.className = `walkforward-window ${passed ? 'is-passed' : 'is-blocked'}`;
+    const period = document.createElement('div');
+    const dates = document.createElement('span');
+    dates.textContent = `${window.from} → ${window.through}`;
+    const trained = document.createElement('small');
+    trained.textContent = `trained through ${window.trainedThrough}`;
+    period.append(dates, trained);
+    const outcome = document.createElement('strong');
+    outcome.textContent = sciencePercent(window.challengerNetReturn);
+    const comparisons = document.createElement('p');
+    comparisons.textContent = `${sciencePercent(window.versusCandidate)} vs Candidate 1 · ${sciencePercent(window.versusBenchmark)} vs VT`;
+    const marker = document.createElement('b');
+    marker.textContent = passed ? 'Won both' : 'Did not win both';
+    row.append(period, outcome, comparisons, marker);
+    return row;
+  });
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'walkforward-empty';
+    empty.textContent = 'No historical window is allowed to count until its universe and inputs can be reconstructed as they were known then.';
+    rows.push(empty);
+  }
+  document.getElementById('walkForwardWindowList').replaceChildren(...rows);
+  const candidate = result.uncertainty?.versusCandidate || {};
+  const benchmark = result.uncertainty?.versusBenchmark || {};
+  document.getElementById('walkForwardUncertainty').textContent = candidate.low === null || candidate.low === undefined
+    ? 'A 95% uncertainty range needs at least five independent annual windows. Until then, the promotion gate stays closed.'
+    : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 1; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
+}
+
 function renderLookthrough(payload) {
   const lookthrough = payload.lookthrough || {};
   const complete = lookthrough.complete === true;
@@ -526,6 +612,7 @@ function renderPortfolioScience(payload) {
   document.getElementById('scienceDecisionNote').textContent = payload.message || 'No allocation changes while evidence is incomplete';
   renderScienceComparison(payload);
   renderScienceChanges(payload);
+  renderWalkForward(payload);
   renderScienceGates(payload);
   renderLookthrough(payload);
   renderValuations(payload.fundamentals);
@@ -541,6 +628,7 @@ async function loadPortfolioScience() {
     setStatus(document.getElementById('scienceStatus'), 'Audit unavailable · no changes', 'limited');
     document.getElementById('scienceDecision').textContent = 'Keep Candidate 1';
     document.getElementById('scienceDecisionNote').textContent = 'Kestrel could not complete the evidence checks, so it made no allocation changes.';
+    renderWalkForward({});
     renderLookthrough({});
     renderValuations({});
     renderDcf({});

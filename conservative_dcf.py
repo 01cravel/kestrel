@@ -29,6 +29,8 @@ MAX_BASE_GROWTH_PCT = 8.0
 MAX_STRONG_GROWTH_PCT = 10.0
 MAX_TERMINAL_SHARE_PCT = 80.0
 TREASURY_SOURCE = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve"
+FCFE_METHOD_SOURCE = "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/AppldCF/derivn/ch11deriv.html"
+ENTERPRISE_BRIDGE_SOURCE = "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/free-cash-flow-valuation"
 
 
 def official_treasury_10y(today: Optional[date] = None) -> Dict[str, Any]:
@@ -120,6 +122,21 @@ def _annual_cashflow_per_share(record: Dict[str, Any]) -> List[Tuple[int, float]
     return [(year, by_year[year][1]) for year in sorted(by_year)]
 
 
+def _annual_net_borrowing_per_share(record: Dict[str, Any]) -> List[Tuple[int, float]]:
+    by_year = {}
+    for item in record.get("history") or []:
+        financing = item.get("financingEvidence") or {}
+        try:
+            year = int(str(item.get("knownOn"))[:4])
+            borrowing = float(item.get("netBorrowing"))
+            shares = float(item.get("tradedShares"))
+        except (TypeError, ValueError):
+            continue
+        if financing.get("ready") and shares > 0:
+            by_year[year] = (str(item.get("knownOn")), borrowing / shares)
+    return [(year, by_year[year][1]) for year in sorted(by_year)]
+
+
 def _growth_anchor(annual: List[Tuple[int, float]]) -> float:
     changes = []
     for (prior_year, prior), (year, value) in zip(annual, annual[1:]):
@@ -164,11 +181,16 @@ def build_company_dcf(symbol: str, cashflow_record: Dict[str, Any],
     annual = _annual_cashflow_per_share(cashflow_record)
     beta = estimate_beta(symbol_history, market_history)
     investment = investment_sensitivity(symbol, current)
+    financing = current.get("financingEvidence") or {
+        "ready": False,
+        "message": "Point-in-time cash, debt, leases, minority interests and net borrowing were not supplied.",
+    }
     base = {
         "symbol": symbol, "method": "Five-year equity cash-flow DCF with a perpetual-growth terminal value",
         "source": "SEC as-filed cash flow and split-normalized market history",
         "beta": beta, "annualCashFlowPoints": len(annual), "forecastYears": FORECAST_YEARS,
         "investmentModel": investment,
+        "financingEvidence": financing,
     }
     if not shares or shares <= 0 or not price or price <= 0:
         return {
@@ -252,16 +274,50 @@ def build_company_dcf(symbol: str, cashflow_record: Dict[str, Any],
                 owner_starts[scenario_id] = start * (0.8 if scenario_id == "downside" else 1.0)
     owner_history_points = len(annual)
     owner_view = view(owner_starts, "Normalized owner cash with a bounded maintenance/growth sensitivity", owner_history_points)
+
+    borrowing_history = _annual_net_borrowing_per_share(cashflow_record)
+    normalized_net_borrowing = None
+    fcfe_starts: Dict[str, float] = {}
+    if financing.get("ready") and len(borrowing_history) >= MIN_ANNUAL_CASHFLOW_POINTS:
+        # A positive borrowing run-rate cannot be assumed to recur forever
+        # without a forecast leverage policy.  Historical repayments count;
+        # historical debt issuance is shown but receives no valuation credit.
+        normalized_net_borrowing = min(0.0, statistics.median(value for _, value in borrowing_history[-3:]))
+        for scenario_id, start in owner_starts.items():
+            adjusted = start + normalized_net_borrowing
+            if adjusted > 0:
+                fcfe_starts[scenario_id] = adjusted
+    fcfe_view = view(
+        fcfe_starts,
+        "Balance-sheet-vetted FCFE: owner cash plus normalized net borrowing",
+        len(borrowing_history),
+    )
+    fcfe_view.update({
+        "ready": bool(fcfe_view.get("ready")) and bool(financing.get("ready")),
+        "netBorrowingHistoryPoints": len(borrowing_history),
+        "normalizedNetBorrowingPerShare": round(normalized_net_borrowing, 4)
+        if normalized_net_borrowing is not None else None,
+        "positiveBorrowingCreditCappedAtZero": True,
+        "balanceSheetClaimsAppliedToFcfe": False,
+        "methodSourceUrl": FCFE_METHOD_SOURCE,
+        "bridgeSourceUrl": ENTERPRISE_BRIDGE_SOURCE,
+        "message": (
+            "Direct FCFE already reflects debt cash flows, so cash, debt, leases and minority claims are evidence checks and are not subtracted again."
+            if fcfe_starts and financing.get("ready") else
+            "Three dated net-borrowing observations and complete same-period financing claims are required."
+        ),
+    })
     selected = owner_view if owner_view["ready"] else reported_view
     ready = bool(selected["ready"])
     return {
         **base, "status": "verified" if ready else "limited", "ready": ready,
         "reportedReady": reported_view["ready"], "normalizedReady": owner_view["ready"],
+        "equityReady": fcfe_view["ready"],
         "currentPrice": round(price, 2),
         "currentFcfPerShare": round(current_cash / shares, 4) if current_cash is not None else None,
         "baseGrowthPct": base_growth, "baseDiscountPct": round(base_discount, 2),
         "riskFreeUsedPct": round(risk_free_used, 3),
-        "reportedView": reported_view, "ownerCashView": owner_view,
+        "reportedView": reported_view, "ownerCashView": owner_view, "fcfeView": fcfe_view,
         "selectedView": "ownerCash" if owner_view["ready"] else "reported",
         "scenarios": selected["scenarios"],
         "rangeLow": selected["rangeLow"], "rangeHigh": selected["rangeHigh"],
@@ -293,6 +349,7 @@ def build_dcf_snapshot(cashflow: Dict[str, Any], histories: Dict[str, Dict[str, 
     reported_ready = sum(bool(record.get("reportedReady")) for record in companies.values())
     normalized_ready = sum(bool(record.get("normalizedReady")) for record in companies.values())
     investment_ready = sum(bool((record.get("investmentModel") or {}).get("ready")) for record in companies.values())
+    equity_ready = sum(bool(record.get("equityReady")) for record in companies.values())
     return {
         "status": "complete" if ready == len(COMPANIES) else "incomplete",
         "complete": ready == len(COMPANIES), "companiesReady": ready,
@@ -300,8 +357,10 @@ def build_dcf_snapshot(cashflow: Dict[str, Any], histories: Dict[str, Dict[str, 
         "normalizedCompaniesReady": normalized_ready,
         "investmentCompaniesReady": investment_ready,
         "investmentEvidenceComplete": investment_ready == len(COMPANIES),
+        "equityCompaniesReady": equity_ready,
+        "equityEvidenceComplete": equity_ready == len(COMPANIES),
         "companiesTotal": len(COMPANIES), "companies": companies,
-        "method": "Reported all-capex DCF kept beside a dated maintenance/growth sensitivity; market beta and terminal-value gates still apply",
+        "method": "Reported all-capex DCF and bounded owner-cash sensitivity preserved; a separate direct-FCFE view adds normalized net borrowing only when same-period financing evidence is complete",
         "assumptions": {
             "riskFreeFloorPct": RISK_FREE_FLOOR_PCT,
             "equityRiskPremiumPct": EQUITY_RISK_PREMIUM_PCT,
@@ -311,5 +370,5 @@ def build_dcf_snapshot(cashflow: Dict[str, Any], histories: Dict[str, Dict[str, 
             "strongGrowthCapPct": MAX_STRONG_GROWTH_PCT,
         },
         "riskFreeEvidence": risk_free_evidence,
-        "warning": "Depreciation is only a cross-check, not assumed maintenance capex. These are sensitivities, not price targets or probabilities.",
+        "warning": "Depreciation is only a cross-check. Direct FCFE is not reduced again by cash, debt, leases or minority claims; doing so would double count financing. Positive future borrowing receives no value credit.",
     }

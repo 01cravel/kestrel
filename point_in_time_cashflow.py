@@ -36,10 +36,68 @@ DEPRECIATION_TAGS = (
     ("us-gaap", "Depreciation"),
     ("ifrs-full", "DepreciationExpense"),
 )
+BORROWING_FLOW_ALTERNATIVES = (
+    (
+        (("us-gaap", "ProceedsFromIssuanceOfDebt"),),
+        (("us-gaap", "RepaymentsOfDebt"),),
+        "All reported debt",
+    ),
+    (
+        (("us-gaap", "ProceedsFromIssuanceOfLongTermDebt"), ("us-gaap", "ProceedsFromShortTermDebt")),
+        (("us-gaap", "RepaymentsOfLongTermDebt"), ("us-gaap", "RepaymentsOfShortTermDebt")),
+        "Long- and short-term debt components",
+    ),
+    (
+        (("ifrs-full", "ProceedsFromBorrowings"),),
+        (("ifrs-full", "RepaymentsOfBorrowings"),),
+        "All reported borrowings",
+    ),
+)
 SHARE_TAGS = (
     ("dei", "EntityCommonStockSharesOutstanding"),
     ("us-gaap", "CommonStockSharesOutstanding"),
 )
+
+# Each alternative is either one aggregate concept or a complete set of
+# components.  Missing components are never silently treated as zero.
+INSTANT_METRICS = {
+    "cash": (
+        (("us-gaap", "CashAndCashEquivalentsAtCarryingValue"),),
+        (("ifrs-full", "CashAndCashEquivalents"),),
+    ),
+    "debt": (
+        (
+            ("us-gaap", "LongTermDebtCurrent"),
+            ("us-gaap", "LongTermDebtNoncurrent"),
+            ("us-gaap", "ShortTermBorrowings"),
+        ),
+        (
+            ("ifrs-full", "CurrentBorrowings"),
+            ("ifrs-full", "NoncurrentBorrowings"),
+        ),
+    ),
+    "leases": (
+        (
+            ("us-gaap", "OperatingLeaseLiabilityCurrent"),
+            ("us-gaap", "OperatingLeaseLiabilityNoncurrent"),
+            ("us-gaap", "FinanceLeaseLiabilityCurrent"),
+            ("us-gaap", "FinanceLeaseLiabilityNoncurrent"),
+        ),
+        (
+            ("us-gaap", "OperatingLeaseLiability"),
+            ("us-gaap", "FinanceLeaseLiability"),
+        ),
+        (("ifrs-full", "LeaseLiabilities"),),
+    ),
+    "minorityInterests": (
+        (("us-gaap", "MinorityInterest"),),
+        (
+            ("us-gaap", "NoncontrollingInterestInConsolidatedEntity"),
+            ("us-gaap", "RedeemableNoncontrollingInterestEquityCarryingAmount"),
+        ),
+        (("ifrs-full", "NoncontrollingInterests"),),
+    ),
+}
 
 
 def _parse_date(value: Any) -> Optional[date]:
@@ -134,6 +192,149 @@ def _facts(payload: Dict[str, Any], tags: Tuple[Tuple[str, str], ...],
     return [], None, None
 
 
+def _instant_row(companyfacts: Dict[str, Any], taxonomy: str, tag: str,
+                 currency: str, as_of: date) -> Optional[Dict[str, Any]]:
+    rows = ((((companyfacts.get("facts") or {}).get(taxonomy) or {}).get(tag) or {}).get("units") or {}).get(currency) or []
+    eligible = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        filed, end = _parse_date(row.get("filed")), _parse_date(row.get("end"))
+        try:
+            value = float(row.get("val"))
+        except (TypeError, ValueError):
+            continue
+        if (
+            row.get("form") in ALLOWED_FORMS
+            and filed and filed <= as_of and end and math.isfinite(value) and value >= 0
+        ):
+            eligible.append({**row, "_filed": filed, "_end": end, "_value": value})
+    return max(eligible, key=lambda item: (item["_end"], item["_filed"])) if eligible else None
+
+
+def _instant_metric(companyfacts: Dict[str, Any], name: str, currency: str,
+                    as_of: date) -> Dict[str, Any]:
+    for alternative in INSTANT_METRICS[name]:
+        selected = [
+            (_instant_row(companyfacts, taxonomy, tag, currency, as_of), taxonomy, tag)
+            for taxonomy, tag in alternative
+        ]
+        if any(row is None for row, _, _ in selected):
+            continue
+        ends = {row["end"] for row, _, _ in selected if row}
+        if len(ends) != 1:
+            continue
+        rows = [row for row, _, _ in selected if row]
+        return {
+            "ready": True,
+            "value": round(sum(row["_value"] for row in rows), 2),
+            "periodEnd": rows[0]["end"],
+            "filed": max(row["filed"] for row in rows),
+            "accessions": sorted({str(row.get("accn") or "") for row in rows if row.get("accn")}),
+            "tags": [f"{taxonomy}:{tag}" for _, taxonomy, tag in selected],
+        }
+    return {
+        "ready": False, "value": None, "periodEnd": None, "filed": None,
+        "accessions": [], "tags": [],
+        "message": f"No complete as-filed {name} fact set was available by the cutoff.",
+    }
+
+
+def _convert_financing_evidence(evidence: Dict[str, Any], factor: float) -> Dict[str, Any]:
+    converted = dict(evidence)
+    for name in ("cash", "debt", "leases", "minorityInterests", "netBorrowing"):
+        metric = dict(converted.get(name) or {})
+        if metric.get("value") is not None:
+            metric["value"] = round(float(metric["value"]) * factor, 2)
+        converted[name] = metric
+    if converted.get("netDebtLikeClaims") is not None:
+        converted["netDebtLikeClaims"] = round(float(converted["netDebtLikeClaims"]) * factor, 2)
+    converted["conversionFactor"] = round(factor, 8)
+    converted["currency"] = "USD"
+    return converted
+
+
+def financing_evidence_as_of(companyfacts: Dict[str, Any], currency: str,
+                             as_of: date) -> Dict[str, Any]:
+    """Return dated financing facts without inferring missing zero balances."""
+    metrics = {
+        name: _instant_metric(companyfacts, name, currency, as_of)
+        for name in INSTANT_METRICS
+    }
+    proceeds_ttm = repayments_ttm = None
+    borrowing_tags: List[str] = []
+    borrowing_scope = None
+    for proceeds_concepts, repayment_concepts, scope in BORROWING_FLOW_ALTERNATIVES:
+        proceeds_parts, repayment_parts = [], []
+        for taxonomy, tag in proceeds_concepts:
+            rows, unit, _ = _facts(companyfacts, ((taxonomy, tag),), (currency,))
+            part = ttm_flow_as_of(rows, as_of) if rows and unit == currency else None
+            if part:
+                proceeds_parts.append((part, f"{taxonomy}:{tag}"))
+        for taxonomy, tag in repayment_concepts:
+            rows, unit, _ = _facts(companyfacts, ((taxonomy, tag),), (currency,))
+            part = ttm_flow_as_of(rows, as_of) if rows and unit == currency else None
+            if part:
+                repayment_parts.append((part, f"{taxonomy}:{tag}"))
+        if len(proceeds_parts) != len(proceeds_concepts) or len(repayment_parts) != len(repayment_concepts):
+            continue
+        periods = {part.get("periodEnd") for part, _ in [*proceeds_parts, *repayment_parts]}
+        if len(periods) != 1:
+            continue
+        proceeds_ttm = {
+            "value": sum(float(part["value"]) for part, _ in proceeds_parts),
+            "periodEnd": proceeds_parts[0][0]["periodEnd"],
+            "filed": max(part["filed"] for part, _ in proceeds_parts),
+        }
+        repayments_ttm = {
+            "value": sum(abs(float(part["value"])) for part, _ in repayment_parts),
+            "periodEnd": repayment_parts[0][0]["periodEnd"],
+            "filed": max(part["filed"] for part, _ in repayment_parts),
+        }
+        borrowing_tags = [tag for _, tag in [*proceeds_parts, *repayment_parts]]
+        borrowing_scope = scope
+        break
+    matched_borrowing = bool(proceeds_ttm and repayments_ttm)
+    net_borrowing = {
+        "ready": matched_borrowing,
+        "value": round(float(proceeds_ttm["value"]) - abs(float(repayments_ttm["value"])), 2)
+        if matched_borrowing else None,
+        "periodEnd": proceeds_ttm.get("periodEnd") if matched_borrowing else None,
+        "filed": max(proceeds_ttm.get("filed"), repayments_ttm.get("filed")) if matched_borrowing else None,
+        "tags": borrowing_tags,
+        "scope": borrowing_scope,
+        "method": "As-filed debt proceeds minus debt repayments over matching trailing periods",
+        "message": None if matched_borrowing else "Matched as-filed debt proceeds and repayments were not both available.",
+    }
+    balance_dates = {
+        metric.get("periodEnd") for metric in metrics.values() if metric.get("ready")
+    }
+    balance_ready = all(metric.get("ready") for metric in metrics.values()) and len(balance_dates) == 1
+    claims = None
+    if balance_ready:
+        claims = (
+            metrics["debt"]["value"] + metrics["leases"]["value"]
+            + metrics["minorityInterests"]["value"] - metrics["cash"]["value"]
+        )
+    return {
+        "ready": balance_ready and matched_borrowing,
+        "balanceSheetReady": balance_ready,
+        "currency": currency,
+        "asOf": as_of.isoformat(),
+        "periodEnd": next(iter(balance_dates)) if balance_ready else None,
+        "cash": metrics["cash"], "debt": metrics["debt"],
+        "leases": metrics["leases"], "minorityInterests": metrics["minorityInterests"],
+        "netBorrowing": net_borrowing,
+        "netDebtLikeClaims": round(claims, 2) if claims is not None else None,
+        "method": "Gross debt, lease obligations and minority interests less cash; financing claims are shown once",
+        "message": (
+            "All balance-sheet claims and matched net borrowing were filed by the cutoff."
+            if balance_ready and matched_borrowing else
+            "Incomplete or mismatched financing evidence keeps the equity valuation closed."
+        ),
+    }
+
+
 def _shares_as_of(entries: Iterable[Dict[str, Any]], as_of: date) -> Optional[Dict[str, Any]]:
     candidates = []
     for row in entries:
@@ -193,6 +394,9 @@ def build_company_cashflow(symbol: str, cik: str, companyfacts: Dict[str, Any],
             ttm_flow_as_of(depreciation, as_of)
             if depreciation and depreciation_currency == currency else None
         )
+        financing = financing_evidence_as_of(companyfacts, currency, as_of)
+        financing["source"] = "SEC EDGAR Company Facts"
+        financing["sourceUrl"] = base["sourceUrl"]
         if not operating or not investment or not share_count:
             return None
         operating_value = operating["value"]
@@ -208,8 +412,11 @@ def build_company_cashflow(symbol: str, cik: str, companyfacts: Dict[str, Any],
             free_cash_flow *= fx
             if depreciation_value is not None:
                 depreciation_value *= fx
+            financing = _convert_financing_evidence(financing, fx)
         elif currency != "USD":
             return None
+        else:
+            financing = _convert_financing_evidence(financing, 1.0)
         traded_shares = (
             share_count["value"] / ADR_RATIOS.get(symbol, 1.0)
             * float(price.get("shareFactor") or 1.0)
@@ -229,6 +436,8 @@ def build_company_cashflow(symbol: str, cik: str, companyfacts: Dict[str, Any],
             "priceToFcf": round(multiple, 2) if multiple else None,
             "fcfYield": round(100 / multiple, 2) if multiple else None,
             "positiveFreeCashFlow": free_cash_flow > 0,
+            "netBorrowing": (financing.get("netBorrowing") or {}).get("value"),
+            "financingEvidence": financing,
             "shareFactor": round(float(price.get("shareFactor") or 1.0), 6),
             "method": operating["method"],
         }
