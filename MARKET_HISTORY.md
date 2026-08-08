@@ -75,3 +75,21 @@ Run a fail-closed integrity check after syncing:
 ```sh
 python3 market_history.py validate --start 2024-08-01 --end 2026-08-01
 ```
+
+## Universe outcome bridge
+
+`universe_outcomes.py` reads the retained references, sessions and
+`swing_observations` after each daily universe freeze. It appends a pending,
+complete, missing, conflict or delisted-complete state for every frozen member.
+An ordinary path starts on the first session after the decision cutoff and must
+cover every archived market session with one clean, same-currency,
+policy-versioned total-return close. Ticker changes are accepted only when the
+reference archive maps both symbols to the frozen stable identity.
+
+Inactive references preserve listing-state changes but do not supply proceeds.
+A terminal result additionally needs matching, timely structured SEC or official
+issuer terms in `issuer_events`. Pure cash terms end at evidenced per-share
+proceeds; stock or mixed terms follow the stable successor through the annual
+horizon. Missing terms, missing sessions, late records, currency changes,
+conflicts and invalid hashes append an incomplete state. Re-running unchanged
+evidence adds nothing; later corrections append without rewriting history.

@@ -44,6 +44,7 @@ from source_policy import POLICY_VERSION as EVIDENCE_POLICY_VERSION, build_evide
 from superinvestors import refresh_superinvestors, superinvestor_snapshot
 from swing_watchlist import swing_watchlist_snapshot
 from universe_ledger import UniverseLedger, market_evidence, security_master_members
+from universe_outcomes import UniverseOutcomeCapture
 
 
 ROOT = Path(__file__).resolve().parent
@@ -80,6 +81,7 @@ MARKET_SYMBOLS = {"BTC": "BINANCE:BTCUSDT"}
 PORTFOLIO_LOCK = threading.Lock()
 UNIVERSE_LEDGER = UniverseLedger()
 MARKET_HISTORY_STORE = MarketHistoryStore()
+UNIVERSE_OUTCOMES = UniverseOutcomeCapture(UNIVERSE_LEDGER, MARKET_HISTORY_STORE.database)
 UNIVERSE_SELECTION_POLICY = "configured-research-universe-v1"
 CERTIFIED_UNIVERSE_SELECTION_POLICY = "certified-ideal-portfolio-universe-v1"
 UNIVERSE_CHECK_SECONDS = 15 * 60
@@ -275,6 +277,19 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
             "oneWayCostBps": 10,
         },
     )
+
+
+def update_daily_universe_ledger(now: datetime | None = None) -> Dict[str, Any]:
+    """Freeze today's truth set and advance every retained outcome path."""
+    instant = now or datetime.now(dt_timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError("Universe workflow time must include a timezone")
+    recorded = instant.astimezone(dt_timezone.utc).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z")
+    snapshot = freeze_daily_universe(instant)
+    outcomes = UNIVERSE_OUTCOMES.capture(recorded)
+    return {"status": "updated", "snapshot": snapshot, "outcomes": outcomes}
 
 
 def load_cache() -> None:
@@ -962,7 +977,9 @@ def main() -> None:
     def universe_snapshot_worker() -> None:
         while True:
             try:
-                freeze_daily_universe()
+                # The same pass advances every older snapshot. Identical
+                # evidence is content-addressed and remains idempotent.
+                update_daily_universe_ledger()
             except (OSError, RuntimeError, ValueError, sqlite3.Error):
                 # Snapshot health is visible through /api/universe-ledger. A
                 # failed capture never interrupts the dashboard or overwrites a

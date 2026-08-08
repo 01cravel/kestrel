@@ -255,6 +255,12 @@ class MarketHistoryStore:
                 raw_sha256 TEXT NOT NULL,
                 PRIMARY KEY (snapshot_date, ticker, active)
             );
+            CREATE INDEX IF NOT EXISTS reference_snapshots_share_figi
+                ON reference_snapshots(share_class_figi, snapshot_date, source_fetched_at);
+            CREATE INDEX IF NOT EXISTS reference_snapshots_composite_figi
+                ON reference_snapshots(composite_figi, snapshot_date, source_fetched_at);
+            CREATE INDEX IF NOT EXISTS reference_snapshots_cik
+                ON reference_snapshots(cik, snapshot_date, source_fetched_at);
             CREATE TABLE IF NOT EXISTS corporate_actions (
                 action_kind TEXT NOT NULL, event_id TEXT NOT NULL, ticker TEXT,
                 event_date TEXT, payload_json TEXT NOT NULL,

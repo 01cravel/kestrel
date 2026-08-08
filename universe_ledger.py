@@ -24,9 +24,11 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATABASE = ROOT / ".kestrel-data" / "universe" / "universe-ledger.sqlite3"
-SCHEMA_VERSION = 1
-PROTOCOL_VERSION = "bitemporal-universe-v1"
+SCHEMA_VERSION = 2
+PROTOCOL_VERSION = "bitemporal-universe-v2"
 COMPLETE_OUTCOMES = {"complete", "delisted_complete"}
+OUTCOME_STATUSES = {"pending", "complete", "missing", "conflict", "delisted_complete"}
+ADJUSTMENT_DEFINITIONS = {"point_in_time_total_return"}
 
 
 def _canonical(value: Any) -> str:
@@ -35,6 +37,17 @@ def _canonical(value: Any) -> str:
 
 def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+
+
+def _sha256(value: Any) -> Optional[str]:
+    raw = str(value or "").strip().lower()
+    if len(raw) != 64:
+        return None
+    try:
+        int(raw, 16)
+    except ValueError:
+        return None
+    return raw
 
 
 def _utc(value: Any) -> Optional[str]:
@@ -206,6 +219,19 @@ class UniverseLedger:
                 ON outcome_versions(snapshot_id, security_id, valid_through, recorded_at);
             """
         )
+        # Version 2 makes the evidence clock and return definition first-class.
+        # ALTER TABLE is deliberately additive so existing immutable rows remain
+        # byte-for-byte untouched; old rows simply cannot certify the v2 protocol.
+        outcome_columns = {row[1] for row in connection.execute("PRAGMA table_info(outcome_versions)")}
+        additions = {
+            "effective_at": "TEXT", "available_at": "TEXT", "retrieved_at": "TEXT",
+            "listing_state": "TEXT", "adjustment_definition": "TEXT",
+            "consideration_json": "TEXT", "source_record_hash": "TEXT",
+            "evidence_hash": "TEXT",
+        }
+        for name, definition in additions.items():
+            if name not in outcome_columns:
+                connection.execute(f"ALTER TABLE outcome_versions ADD COLUMN {name} {definition}")
         immutable_tables = (
             "universe_snapshots", "identity_versions", "snapshot_members",
             "evidence_versions", "lookthrough_versions", "outcome_versions",
@@ -222,7 +248,7 @@ class UniverseLedger:
                     SELECT RAISE(ABORT, 'immutable ledger rows cannot be deleted'); END"""
             )
         connection.execute(
-            "INSERT OR IGNORE INTO ledger_metadata(key, value) VALUES('schema_version', ?)",
+            "INSERT OR REPLACE INTO ledger_metadata(key, value) VALUES('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
         connection.commit()
@@ -450,26 +476,69 @@ class UniverseLedger:
         payload: Optional[Dict[str, Any]] = None, delisted_on: Optional[str] = None,
         proceeds: Optional[float] = None, currency: Optional[str] = None,
         recorded_at: Optional[str] = None,
+        effective_at: Optional[str] = None, available_at: Optional[str] = None,
+        retrieved_at: Optional[str] = None, listing_state: str = "active",
+        adjustment_definition: Optional[str] = None,
+        consideration: Optional[Dict[str, Any]] = None,
+        source_record_hash: Optional[str] = None,
+        evidence_hash: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Append a later outcome state; prior states remain untouched."""
         through = _date(valid_through)
         recorded = _utc(recorded_at) if recorded_at else _now()
+        effective = _utc(effective_at) if effective_at else None
+        available = _utc(available_at) if available_at else None
+        retrieved = _utc(retrieved_at) if retrieved_at else None
         delisted = _date(delisted_on) if delisted_on else None
-        if not through or not recorded or status not in {"pending", "complete", "missing", "delisted_complete"}:
+        if not through or not recorded or status not in OUTCOME_STATUSES:
             raise ValueError("Outcome date, recorded time or status is invalid")
         if not source.strip() or not source_record_id.strip():
             raise ValueError("Outcome source and source record ID are required")
-        if status == "complete" and not payload:
-            raise ValueError("A complete outcome requires independent outcome evidence")
-        if status == "delisted_complete" and (not delisted or _finite(proceeds) is None or not currency):
-            raise ValueError("A complete delisting outcome requires date, proceeds and currency")
+        if not effective or not available or not retrieved:
+            raise ValueError("Outcome effective, availability and retrieval times are required")
+        if available > recorded or retrieved > recorded:
+            raise ValueError("Late outcome evidence cannot enter an earlier recorded state")
+        if available > retrieved:
+            raise ValueError("Outcome evidence cannot be retrieved before it was available")
+        if effective[:10] > through:
+            raise ValueError("Outcome effective time cannot follow its valid-through date")
+        if status in COMPLETE_OUTCOMES and recorded[:10] < through:
+            raise ValueError("A complete outcome cannot be recorded before its valid-through date")
+        normalized_currency = str(currency or "").strip().upper() or None
+        if normalized_currency and (len(normalized_currency) != 3 or not normalized_currency.isalpha()):
+            raise ValueError("Outcome currency must be an ISO 4217 code")
+        if adjustment_definition not in ADJUSTMENT_DEFINITIONS:
+            raise ValueError("A recognized point-in-time adjustment definition is required")
+        normalized_source_hash = _sha256(source_record_hash)
+        normalized_evidence_hash = _sha256(evidence_hash)
+        if not normalized_source_hash:
+            raise ValueError("A valid SHA-256 source record hash is required")
+        if not normalized_evidence_hash:
+            raise ValueError("A valid SHA-256 evidence hash is required")
+        if status in COMPLETE_OUTCOMES and (not payload or not normalized_currency):
+            raise ValueError("A complete outcome requires independent evidence and currency")
+        consideration_body = consideration or {}
+        if status == "delisted_complete":
+            kind = str(consideration_body.get("kind") or "")
+            cash_value = _finite(proceeds)
+            cash_complete = kind in {"cash", "mixed"} and cash_value is not None and cash_value >= 0
+            stock_complete = kind in {"stock", "mixed"} and bool(
+                consideration_body.get("successorSecurityId")
+                and (_finite(consideration_body.get("sharesPerShare")) or 0) > 0
+            )
+            if (not delisted or listing_state != "delisted" or not (cash_complete or stock_complete)):
+                raise ValueError("A complete delisting requires dated listing and consideration evidence")
         body = payload or {}
         payload_hash = _digest(body)
         outcome = {
             "snapshotId": snapshot_id, "securityId": security_id,
             "validThrough": through, "recordedAt": recorded, "status": status,
-            "delistedOn": delisted, "proceeds": _finite(proceeds), "currency": currency,
+            "effectiveAt": effective, "availableAt": available, "retrievedAt": retrieved,
+            "listingState": listing_state, "adjustmentDefinition": adjustment_definition,
+            "delistedOn": delisted, "proceeds": _finite(proceeds), "currency": normalized_currency,
+            "consideration": consideration_body,
             "source": source, "sourceRecordId": source_record_id, "payloadHash": payload_hash,
+            "sourceRecordHash": normalized_source_hash, "evidenceHash": normalized_evidence_hash,
         }
         outcome_id = _digest(outcome)
         with self.connect() as connection:
@@ -479,10 +548,27 @@ class UniverseLedger:
             ).fetchone()
             if not member:
                 raise ValueError("Outcome does not belong to a frozen universe member")
+            existing = connection.execute(
+                """SELECT outcome_id FROM outcome_versions
+                   WHERE snapshot_id=? AND security_id=? AND status=? AND valid_through=?
+                   AND source_record_id=? AND source_record_hash=? AND payload_hash=?""",
+                (snapshot_id, security_id, status, through, source_record_id,
+                 normalized_source_hash, payload_hash),
+            ).fetchone()
+            if existing:
+                return {"status": "unchanged", "outcomeId": existing["outcome_id"]}
             connection.execute(
-                "INSERT OR IGNORE INTO outcome_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                """INSERT INTO outcome_versions
+                   (outcome_id, snapshot_id, security_id, valid_through, recorded_at, status,
+                    delisted_on, proceeds, currency, source, source_record_id, payload_hash,
+                    payload_json, effective_at, available_at, retrieved_at, listing_state,
+                    adjustment_definition, consideration_json, source_record_hash, evidence_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (outcome_id, snapshot_id, security_id, through, recorded, status, delisted,
-                 _finite(proceeds), currency, source, source_record_id, payload_hash, _canonical(body)),
+                 _finite(proceeds), normalized_currency, source, source_record_id, payload_hash,
+                 _canonical(body), effective, available, retrieved, listing_state,
+                 adjustment_definition, _canonical(consideration_body), normalized_source_hash,
+                 normalized_evidence_hash),
             )
             connection.commit()
         return {"status": "recorded", "outcomeId": outcome_id}
@@ -531,6 +617,16 @@ class UniverseLedger:
                 "evidenceVersions": connection.execute("SELECT COUNT(*) FROM evidence_versions").fetchone()[0],
                 "outcomeVersions": connection.execute("SELECT COUNT(*) FROM outcome_versions").fetchone()[0],
             }
+            latest_outcomes: Dict[Tuple[str, str], str] = {}
+            for outcome in connection.execute(
+                """SELECT snapshot_id, security_id, status FROM outcome_versions
+                   ORDER BY recorded_at, rowid"""
+            ):
+                latest_outcomes[(outcome["snapshot_id"], outcome["security_id"])] = outcome["status"]
+            outcome_states: Dict[str, int] = {}
+            for state in latest_outcomes.values():
+                outcome_states[state] = outcome_states.get(state, 0) + 1
+            counts["outcomeStates"] = outcome_states
         if not row:
             return {"status": "empty", "database": str(self.database), **counts}
         return {"status": "ready", "database": str(self.database), **counts,
@@ -558,7 +654,7 @@ class UniverseLedger:
             for member in rebuilt["members"]:
                 row = connection.execute(
                     """SELECT * FROM outcome_versions WHERE snapshot_id=? AND security_id=?
-                       ORDER BY valid_through DESC, recorded_at DESC LIMIT 1""",
+                       ORDER BY recorded_at DESC, rowid DESC LIMIT 1""",
                     (snapshot_id, member["security_id"]),
                 ).fetchone()
                 outcomes[member["ticker"]] = dict(row) if row else {}
@@ -566,6 +662,10 @@ class UniverseLedger:
         for symbol in expected:
             member = by_ticker.get(symbol) or {}
             outcome = outcomes.get(symbol) or {}
+            try:
+                consideration_kind = str(json.loads(outcome.get("consideration_json") or "{}").get("kind") or "")
+            except (AttributeError, TypeError, json.JSONDecodeError):
+                consideration_kind = ""
             universe_records[symbol] = {
                 "securityId": member.get("security_id"),
                 "includedAtFreeze": bool(member.get("included")),
@@ -574,6 +674,11 @@ class UniverseLedger:
                 "outcomeComplete": outcome.get("status") in COMPLETE_OUTCOMES,
                 "delisted": outcome.get("status") == "delisted_complete",
                 "validThrough": outcome.get("valid_through"),
+                "outcomeStatus": outcome.get("status") or "pending",
+                "listingState": outcome.get("listing_state") or "unknown",
+                "currency": outcome.get("currency"),
+                "adjustmentDefinition": outcome.get("adjustment_definition"),
+                "considerationKind": consideration_kind or None,
             }
         chain = [self.reconstruct(value) for value in related_ids]
         chain_clean = bool(chain) and all(item.get("status") == "verified" for item in chain)
@@ -595,10 +700,12 @@ class UniverseLedger:
         one_year = (dt.date.fromisoformat(rebuilt["decisionDate"]) + dt.timedelta(days=365)).isoformat()
         required_through = max(latest_chain_date, one_year)
         for record in universe_records.values():
-            terminal = record["delisted"]
+            terminal = record["delisted"] and record.get("considerationKind") == "cash"
             record["outcomeComplete"] = bool(
                 record["outcomeComplete"] and
                 (terminal or str(record.get("validThrough") or "") >= required_through)
+                and record.get("currency")
+                and record.get("adjustmentDefinition") == "point_in_time_total_return"
             )
             record["requiredThrough"] = required_through
         all_records = all(
