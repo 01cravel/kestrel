@@ -42,7 +42,9 @@ EXPECTED_COLUMNS = {
     },
     "lookthrough_versions": {
         "lookthrough_id", "snapshot_id", "as_of", "available_at", "complete", "source",
-        "payload_hash", "payload_json",
+        "payload_hash", "payload_json", "retrieved_at", "fund_security_id",
+        "share_class_id", "holdings_report_id", "fee_report_id", "reporting_lag_days",
+        "source_hashes_json",
     },
     "outcome_versions": {
         "outcome_id", "snapshot_id", "security_id", "valid_through", "recorded_at", "status",
@@ -55,6 +57,7 @@ MIGRATION_NAMES = {
     1: "initial-bitemporal-ledger",
     2: "outcome-provenance",
     3: "operational-integrity",
+    4: "archived-etf-evidence",
 }
 
 
@@ -254,7 +257,14 @@ def audit_database(database: Path, expected_schema_version: int) -> Dict[str, An
                     payload = json.loads(row["payload_json"])
                     body = {
                         "asOf": row["as_of"], "availableAt": row["available_at"],
+                        "retrievedAt": row["retrieved_at"],
                         "complete": bool(row["complete"]), "source": row["source"],
+                        "fundSecurityId": row["fund_security_id"],
+                        "shareClassId": row["share_class_id"],
+                        "holdingsReportId": row["holdings_report_id"],
+                        "feeReportId": row["fee_report_id"],
+                        "reportingLagDays": row["reporting_lag_days"],
+                        "sourceHashes": json.loads(row["source_hashes_json"] or "[]"),
                         "payloadHash": row["payload_hash"], "payload": payload,
                     }
                     clean = _digest(body) == row["lookthrough_id"]

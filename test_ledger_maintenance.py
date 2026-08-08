@@ -151,7 +151,7 @@ class LedgerMaintenanceTests(unittest.TestCase):
             versions = [row[0] for row in connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             )]
-            self.assertEqual(versions, [1, 2, 3])
+            self.assertEqual(versions, list(range(1, SCHEMA_VERSION + 1)))
             triggers = {row[0] for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='trigger'"
             )}
