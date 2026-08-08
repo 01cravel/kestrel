@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from analyst_data import fetch_analyst_intelligence
 from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
 from catalyst_watch import catalyst_watch_snapshot
+from company_guidance import sec_guidance_evidence
 from earnings_calendar import earnings_context, earnings_radar
 from investor_history import investor_calibration_summary, record_investor_ideas
 from learning import learning_status
@@ -694,6 +695,18 @@ class KestrelHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 self.send_json(earnings_context(symbol))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
+        if parsed.path == "/api/guidance":
+            query = urllib.parse.parse_qs(parsed.query)
+            symbol = str((query.get("symbol") or [""])[0]).upper()
+            cutoff = (query.get("cutoff") or [None])[0]
+            if not symbol.isalnum():
+                self.send_json({"ok": False, "message": "A ticker is required"}, status=400)
+                return
+            try:
+                self.send_json(sec_guidance_evidence(symbol, cutoff=cutoff))
             except (RuntimeError, ValueError) as error:
                 self.send_json({"ok": False, "message": str(error)}, status=502)
             return

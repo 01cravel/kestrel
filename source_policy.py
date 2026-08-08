@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 
-POLICY_VERSION = "2026.07.31.5"
+POLICY_VERSION = "2026.08.08.1"
 
 TIERS = [
     {
@@ -100,6 +100,16 @@ SOURCE_AREAS = [
         "target": "Named Benzinga actions cross-checked against consensus, then LSEG I/B/E/S or FactSet point-in-time detail if its value justifies the cost",
         "status": "provisional",
         "url": "https://www.lseg.com/en/data-analytics/financial-data/company-data/ibes-estimates",
+    },
+    {
+        "id": "company_guidance",
+        "name": "Company guidance",
+        "truth": "Company-issued guidance in SEC-filed earnings releases or a verified official investor-relations publication",
+        "current": "On-demand SEC 8-K and 6-K release ingestion with exact acceptance cutoffs and fail-closed range comparison",
+        "currentTier": 1,
+        "target": "Archive verified issuer IR releases that are not furnished through EDGAR",
+        "status": "connected",
+        "url": "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
     },
     {
         "id": "manager_holdings",

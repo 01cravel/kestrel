@@ -12,6 +12,8 @@ Kestrel answers two questions:
 The planned intelligence, verification, charting, and international-market work is tracked in [ROADMAP.md](ROADMAP.md).
 The authoritative-source hierarchy and confidence gates are defined in [SOURCE_POLICY.md](SOURCE_POLICY.md).
 
+Verified company guidance is available on demand at `/api/guidance?symbol=MSFT`. The response keeps the exact publication cutoff and range, explains comparable changes in plain English, and never changes valuation or portfolio-risk gates.
+
 ## Run locally
 
 ```sh
