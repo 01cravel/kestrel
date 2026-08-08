@@ -29,6 +29,13 @@ CAPEX_TAGS = (
     ("ifrs-full", "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"),
     ("ifrs-full", "PurchaseOfPropertyPlantAndEquipment"),
 )
+DEPRECIATION_TAGS = (
+    # Keep this aligned with the productive-asset cash outflow above.  Broad
+    # D&A can include acquired intangibles and is not a sound maintenance
+    # anchor for property and equipment.
+    ("us-gaap", "Depreciation"),
+    ("ifrs-full", "DepreciationExpense"),
+)
 SHARE_TAGS = (
     ("dei", "EntityCommonStockSharesOutstanding"),
     ("us-gaap", "CommonStockSharesOutstanding"),
@@ -166,11 +173,15 @@ def build_company_cashflow(symbol: str, cik: str, companyfacts: Dict[str, Any],
     current_day = today or date.today()
     cfo, currency, cfo_tag = _facts(companyfacts, CFO_TAGS, ("USD", "EUR", "TWD"))
     capex, capex_currency, capex_tag = _facts(companyfacts, CAPEX_TAGS, (currency,) if currency else ())
+    depreciation, depreciation_currency, depreciation_tag = _facts(
+        companyfacts, DEPRECIATION_TAGS, (currency,) if currency else ()
+    )
     shares, _, share_tag = _facts(companyfacts, SHARE_TAGS, ("shares",))
     base = {
         "symbol": symbol, "source": "SEC EDGAR Company Facts",
         "sourceUrl": f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
         "currency": currency, "cfoTag": cfo_tag, "capexTag": capex_tag,
+        "depreciationTag": depreciation_tag,
         "shareTag": share_tag, "definition": "Operating cash flow minus productive-asset purchases, normally property and equipment",
     }
     if not cfo or not capex or not shares or currency != capex_currency:
@@ -178,14 +189,25 @@ def build_company_cashflow(symbol: str, cik: str, companyfacts: Dict[str, Any],
 
     def observation(as_of: date, price: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         operating, investment, share_count = ttm_flow_as_of(cfo, as_of), ttm_flow_as_of(capex, as_of), _shares_as_of(shares, as_of)
+        depreciation_charge = (
+            ttm_flow_as_of(depreciation, as_of)
+            if depreciation and depreciation_currency == currency else None
+        )
         if not operating or not investment or not share_count:
             return None
-        free_cash_flow = operating["value"] - abs(investment["value"])
+        operating_value = operating["value"]
+        investment_value = abs(investment["value"])
+        free_cash_flow = operating_value - investment_value
+        depreciation_value = abs(depreciation_charge["value"]) if depreciation_charge else None
         if currency == "EUR":
             fx = _on_or_before(fx_rates, price["date"])
             if fx is None:
                 return None
+            operating_value *= fx
+            investment_value *= fx
             free_cash_flow *= fx
+            if depreciation_value is not None:
+                depreciation_value *= fx
         elif currency != "USD":
             return None
         traded_shares = (
@@ -200,8 +222,9 @@ def build_company_cashflow(symbol: str, cik: str, companyfacts: Dict[str, Any],
         return {
             "knownOn": as_of.isoformat(), "priceDate": price["date"].isoformat(),
             "price": round(price["close"], 4), "filed": filed_day.isoformat(),
-            "operatingCashFlow": round(operating["value"], 2),
-            "capitalInvestment": round(abs(investment["value"]), 2),
+            "operatingCashFlow": round(operating_value, 2),
+            "capitalInvestment": round(investment_value, 2),
+            "depreciation": round(depreciation_value, 2) if depreciation_value is not None else None,
             "freeCashFlow": round(free_cash_flow, 2), "tradedShares": round(traded_shares),
             "priceToFcf": round(multiple, 2) if multiple else None,
             "fcfYield": round(100 / multiple, 2) if multiple else None,

@@ -67,6 +67,20 @@ class PointInTimeCashFlowTests(unittest.TestCase):
         self.assertEqual(result["current"]["tradedShares"], 200)
         self.assertEqual(result["current"]["priceToFcf"], 25.0)
 
+    def test_point_in_time_ppe_depreciation_is_exposed_only_when_filed(self):
+        facts = {"facts": {
+            "us-gaap": {
+                "NetCashProvidedByUsedInOperatingActivities": {"units": {"USD": [flow("2025-01-01", "2025-12-31", 100, "2026-02-01", "10-K", "a")]}},
+                "PaymentsToAcquirePropertyPlantAndEquipment": {"units": {"USD": [flow("2025-01-01", "2025-12-31", 60, "2026-02-01", "10-K", "a")]}},
+                "Depreciation": {"units": {"USD": [flow("2025-01-01", "2025-12-31", 35, "2026-02-01", "10-K", "a")]}},
+            },
+            "dei": {"EntityCommonStockSharesOutstanding": {"units": {"shares": [{"end": "2025-12-31", "val": 10, "filed": "2026-02-01", "form": "10-K"}]}}},
+        }}
+        price = {"date": date(2026, 2, 2), "close": 10}
+        result = build_company_cashflow("AMZN", "0001", facts, [price], {}, today=date(2026, 2, 2))
+        self.assertEqual(result["current"]["depreciation"], 35.0)
+        self.assertEqual(result["depreciationTag"], "us-gaap:Depreciation")
+
 
 if __name__ == "__main__":
     unittest.main()

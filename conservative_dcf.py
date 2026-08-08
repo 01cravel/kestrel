@@ -14,6 +14,8 @@ import xml.etree.ElementTree as ET
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
+from maintenance_investment import investment_sensitivity
+
 
 COMPANIES = ("TSM", "GOOGL", "AMZN", "ASML", "MELI", "ETN", "ISRG", "CEG")
 MARKET_PROXY = "VTI"
@@ -161,15 +163,22 @@ def build_company_dcf(symbol: str, cashflow_record: Dict[str, Any],
     )
     annual = _annual_cashflow_per_share(cashflow_record)
     beta = estimate_beta(symbol_history, market_history)
+    investment = investment_sensitivity(symbol, current)
     base = {
         "symbol": symbol, "method": "Five-year equity cash-flow DCF with a perpetual-growth terminal value",
         "source": "SEC as-filed cash flow and split-normalized market history",
         "beta": beta, "annualCashFlowPoints": len(annual), "forecastYears": FORECAST_YEARS,
+        "investmentModel": investment,
     }
-    if not current_cash or current_cash <= 0 or not shares or shares <= 0 or not price or price <= 0:
+    if not shares or shares <= 0 or not price or price <= 0:
         return {
             **base, "status": "unavailable", "ready": False, "currentPrice": price,
-            "message": "Current free cash flow is not positive, so a conventional DCF would manufacture a result.",
+            "message": "Current share or price evidence is missing, so no per-share DCF can be built.",
+        }
+    if (current_cash is None or current_cash <= 0) and not investment.get("ready"):
+        return {
+            **base, "status": "unavailable", "ready": False, "currentPrice": round(price, 2),
+            "message": "Reported free cash flow is not positive and no qualifying investment split can support an owner-cash sensitivity.",
         }
     if len(annual) < MIN_ANNUAL_CASHFLOW_POINTS:
         return {
@@ -182,39 +191,86 @@ def build_company_dcf(symbol: str, cashflow_record: Dict[str, Any],
             "message": "There is too little common market history to estimate a conservative discount rate.",
         }
 
-    current_per_share = current_cash / shares
-    recent = [value for _, value in annual[-3:]]
-    normalized_per_share = min(current_per_share, statistics.median(recent))
     base_growth = _growth_anchor(annual)
     risk_free_used = max(RISK_FREE_FLOOR_PCT, risk_free_pct)
     base_discount = max(BASE_DISCOUNT_FLOOR_PCT, risk_free_used + beta["used"] * EQUITY_RISK_PREMIUM_PCT)
-    assumptions = [
-        ("downside", "Downside", normalized_per_share * 0.8, max(-5.0, min(0.0, base_growth - 6.0)), base_discount + 2.0, 1.5),
-        ("base", "Conservative base", normalized_per_share, base_growth, base_discount, 2.0),
-        ("strong", "Strong execution", normalized_per_share, min(MAX_STRONG_GROWTH_PCT, base_growth + 3.0), max(9.5, base_discount - 1.0), 2.5),
-    ]
-    scenarios = []
-    for scenario_id, name, start, growth, discount, terminal_growth in assumptions:
-        result = discounted_value(start, growth, discount, terminal_growth)
-        scenarios.append({
-            "id": scenario_id, "name": name,
-            "startFcfPerShare": round(start, 4), "growthPct": round(growth, 2),
-            "discountPct": round(discount, 2), "terminalGrowthPct": terminal_growth,
-            **result, "versusPricePct": round((result["value"] / price - 1) * 100, 1),
-        })
-    base_case = next(item for item in scenarios if item["id"] == "base")
-    ready = base_case["terminalSharePct"] <= MAX_TERMINAL_SHARE_PCT
+    scenario_terms = {
+        "downside": ("Downside", max(-5.0, min(0.0, base_growth - 6.0)), base_discount + 2.0, 1.5),
+        "base": ("Conservative base", base_growth, base_discount, 2.0),
+        "strong": ("Strong execution", min(MAX_STRONG_GROWTH_PCT, base_growth + 3.0), max(9.5, base_discount - 1.0), 2.5),
+    }
+
+    def view(starts: Dict[str, float], label: str, points: int) -> Dict[str, Any]:
+        scenarios = []
+        for scenario_id in ("downside", "base", "strong"):
+            start = starts.get(scenario_id)
+            if start is None or start <= 0:
+                continue
+            name, growth, discount, terminal_growth = scenario_terms[scenario_id]
+            result = discounted_value(start, growth, discount, terminal_growth)
+            scenarios.append({
+                "id": scenario_id, "name": name,
+                "startFcfPerShare": round(start, 4), "growthPct": round(growth, 2),
+                "discountPct": round(discount, 2), "terminalGrowthPct": terminal_growth,
+                **result, "versusPricePct": round((result["value"] / price - 1) * 100, 1),
+            })
+        base_case = next((item for item in scenarios if item["id"] == "base"), None)
+        ready = bool(base_case) and points >= MIN_ANNUAL_CASHFLOW_POINTS and base_case["terminalSharePct"] <= MAX_TERMINAL_SHARE_PCT
+        values = [item["value"] for item in scenarios]
+        return {
+            "label": label, "ready": ready, "historyPoints": points,
+            "scenarios": scenarios, "rangeLow": min(values) if values else None,
+            "rangeHigh": max(values) if values else None,
+            "message": (
+                "The view passed history and terminal-value checks."
+                if ready else "Positive starting cash, three annual observations and the terminal-value check are required."
+            ),
+        }
+
+    reported_recent = [value for _, value in annual[-3:]]
+    reported_start = None
+    if current_cash is not None and current_cash > 0 and reported_recent:
+        reported_start = min(current_cash / shares, statistics.median(reported_recent))
+    reported_view = view(
+        {key: reported_start * (0.8 if key == "downside" else 1.0) for key in scenario_terms}
+        if reported_start else {},
+        "Reported operating cash flow less all productive-asset spending",
+        len(annual),
+    )
+
+    owner_starts: Dict[str, float] = {}
+    if investment.get("ready"):
+        current_by_id = {item["id"]: item for item in investment.get("scenarios") or []}
+        # Current issuer evidence must never be projected backward into an old
+        # cutoff.  Historical reported FCF only supplies the observation gate
+        # and a conservative cap on today's normalized starting cash.
+        history_cap = statistics.median(reported_recent) if reported_recent else None
+        for scenario_id in ("downside", "base", "strong"):
+            owner_cash = _number((current_by_id.get(scenario_id) or {}).get("ownerCash"))
+            if owner_cash and owner_cash > 0 and history_cap:
+                start = min(owner_cash / shares, history_cap)
+                owner_starts[scenario_id] = start * (0.8 if scenario_id == "downside" else 1.0)
+    owner_history_points = len(annual)
+    owner_view = view(owner_starts, "Normalized owner cash with a bounded maintenance/growth sensitivity", owner_history_points)
+    selected = owner_view if owner_view["ready"] else reported_view
+    ready = bool(selected["ready"])
     return {
         **base, "status": "verified" if ready else "limited", "ready": ready,
-        "currentPrice": round(price, 2), "currentFcfPerShare": round(current_per_share, 4),
-        "normalizedFcfPerShare": round(normalized_per_share, 4),
+        "reportedReady": reported_view["ready"], "normalizedReady": owner_view["ready"],
+        "currentPrice": round(price, 2),
+        "currentFcfPerShare": round(current_cash / shares, 4) if current_cash is not None else None,
         "baseGrowthPct": base_growth, "baseDiscountPct": round(base_discount, 2),
         "riskFreeUsedPct": round(risk_free_used, 3),
-        "scenarios": scenarios,
-        "rangeLow": scenarios[0]["value"], "rangeHigh": scenarios[-1]["value"],
+        "reportedView": reported_view, "ownerCashView": owner_view,
+        "selectedView": "ownerCash" if owner_view["ready"] else "reported",
+        "scenarios": selected["scenarios"],
+        "rangeLow": selected["rangeLow"], "rangeHigh": selected["rangeHigh"],
         "message": (
-            "The model passed its history, discount-rate and terminal-value checks."
-            if ready else "Too much of the result comes from the terminal value, so confidence remains limited."
+            "A dated, bounded owner-cash view passed the evidence checks."
+            if owner_view["ready"] else
+            "The reported all-capex view passed; the maintenance/growth distinction remains evidence-limited."
+            if reported_view["ready"] else
+            "No cash-flow view passed every history, market and terminal-value check."
         ),
     }
 
@@ -234,11 +290,18 @@ def build_dcf_snapshot(cashflow: Dict[str, Any], histories: Dict[str, Dict[str, 
         for symbol in COMPANIES
     }
     ready = sum(bool(record.get("ready")) for record in companies.values())
+    reported_ready = sum(bool(record.get("reportedReady")) for record in companies.values())
+    normalized_ready = sum(bool(record.get("normalizedReady")) for record in companies.values())
+    investment_ready = sum(bool((record.get("investmentModel") or {}).get("ready")) for record in companies.values())
     return {
         "status": "complete" if ready == len(COMPANIES) else "incomplete",
         "complete": ready == len(COMPANIES), "companiesReady": ready,
+        "reportedCompaniesReady": reported_ready,
+        "normalizedCompaniesReady": normalized_ready,
+        "investmentCompaniesReady": investment_ready,
+        "investmentEvidenceComplete": investment_ready == len(COMPANIES),
         "companiesTotal": len(COMPANIES), "companies": companies,
-        "method": "Five-year levered cash-flow scenarios; market beta sets a floored cost of equity; terminal growth never exceeds 2.5%",
+        "method": "Reported all-capex DCF kept beside a dated maintenance/growth sensitivity; market beta and terminal-value gates still apply",
         "assumptions": {
             "riskFreeFloorPct": RISK_FREE_FLOOR_PCT,
             "equityRiskPremiumPct": EQUITY_RISK_PREMIUM_PCT,
@@ -248,5 +311,5 @@ def build_dcf_snapshot(cashflow: Dict[str, Any], histories: Dict[str, Dict[str, 
             "strongGrowthCapPct": MAX_STRONG_GROWTH_PCT,
         },
         "riskFreeEvidence": risk_free_evidence,
-        "warning": "These are sensitivity ranges, not price targets or probabilities. Small assumption changes can materially alter DCF values.",
+        "warning": "Depreciation is only a cross-check, not assumed maintenance capex. These are sensitivities, not price targets or probabilities.",
     }

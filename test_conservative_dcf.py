@@ -71,6 +71,31 @@ class ConservativeDcfTests(unittest.TestCase):
         self.assertFalse(result["ready"])
         self.assertEqual(result["status"], "limited")
 
+    def test_dated_investment_evidence_can_value_positive_owner_cash_without_hiding_reported_loss(self):
+        stock, market = history(multiplier=1.2)
+        rows = []
+        for index in range(6):
+            operating, capex, depreciation = 150 + index * 10, 120, 70
+            rows.append({
+                "knownOn": f"{2020 + index}-12-31",
+                "operatingCashFlow": operating, "capitalInvestment": capex,
+                "depreciation": depreciation, "freeCashFlow": operating - capex,
+                "tradedShares": 10, "price": 100,
+            })
+        record = {
+            "current": {
+                "knownOn": "2026-08-08", "operatingCashFlow": 150,
+                "capitalInvestment": 200, "depreciation": 80,
+                "freeCashFlow": -50, "tradedShares": 10, "price": 100,
+            },
+            "history": rows,
+        }
+        result = build_company_dcf("AMZN", record, stock, market)
+        self.assertFalse(result["reportedReady"])
+        self.assertTrue(result["normalizedReady"])
+        self.assertEqual(result["currentFcfPerShare"], -5.0)
+        self.assertEqual(result["selectedView"], "ownerCash")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -98,6 +98,12 @@ class PortfolioScienceTests(unittest.TestCase):
         self.assertTrue(gate["passed"])
         self.assertEqual(gate["detail"], "8 of 8 as-filed histories; 8 of 8 cash-flow histories; 8 of 8 Nasdaq prices")
 
+    def test_investment_split_has_its_own_fail_closed_gate(self):
+        report = analyze_portfolio_science(histories(), iterations=100)
+        gate = next(item for item in report["gates"]["items"] if item["id"] == "investment_split")
+        self.assertFalse(gate["passed"])
+        self.assertEqual(gate["detail"], "0 of 8 companies have dated issuer evidence and a depreciation cross-check")
+
     def test_missing_history_fails_closed(self):
         available = histories()
 
