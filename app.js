@@ -1,6 +1,8 @@
 const INSTRUMENTS = {
   MU: { name: 'Micron Technology', sector: 'Semiconductors', country: 'US' },
   SPY: { name: 'S&P 500 fund', sector: 'Broad market', country: 'US', type: 'fund' },
+  GMOI: { name: 'GMO International Value ETF', sector: 'International value', country: 'Developed markets outside the US', type: 'fund' },
+  IEMG: { name: 'iShares Core MSCI Emerging Markets ETF', sector: 'Emerging markets', country: 'Emerging markets', type: 'fund' },
   NBIS: { name: 'Nebius Group', sector: 'Software', country: 'Netherlands' },
   VRT: { name: 'Vertiv', sector: 'Industrial', country: 'US' },
   V: { name: 'Visa', sector: 'Financial services', country: 'US' },
@@ -56,6 +58,16 @@ const OWNER_GUIDES = {
     business: 'Owns a small piece of roughly 500 of America’s largest listed companies in one fund.',
     wealthDriver: 'It compounds with the long-term growth and profits of large US businesses without relying on one winner.',
     mainRisk: 'It will fall with the US market and is currently heavily influenced by its largest technology holdings.',
+  },
+  GMOI: {
+    business: 'Owns a selection of lower-priced companies across developed markets outside the United States, chosen by GMO rather than automatically following an index.',
+    wealthDriver: 'It can benefit if overlooked international companies recover and cheaper markets close part of their valuation gap with the United States.',
+    mainRisk: 'The manager can choose poorly, value shares can remain unpopular for years, and currency movements can reduce your return in US dollars.',
+  },
+  IEMG: {
+    business: 'Owns thousands of large, medium and smaller companies across emerging economies in one fund.',
+    wealthDriver: 'It can compound as emerging economies, consumers and businesses grow, while spreading the risk across many countries and companies.',
+    mainRisk: 'Political shocks, weaker currencies, less reliable governance and sharp market falls can make it much more volatile than a developed-market fund.',
   },
   NBIS: {
     business: 'Builds cloud computing infrastructure designed for companies developing artificial intelligence.',

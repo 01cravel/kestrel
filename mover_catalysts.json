@@ -54,5 +54,45 @@
         "url": "https://ir.roblox.com/events-and-presentations/events/event-details/2026/Roblox-Q2-2026-Earnings-Conference-Call/default.aspx"
       }
     ]
+  },
+  "2026-08-03:ATKR": {
+    "status": "verified",
+    "category": "Acquisition",
+    "headline": "Prysmian agreed to acquire Atkore for $95 a share in cash",
+    "plainEnglish": "Atkore agreed to be acquired by Prysmian for $95 a share in cash, valuing the business at about $3.8 billion. The firm offer put a clear cash value on the shares and explains the jump toward the offer price.",
+    "knownBefore": "Atkore had already disclosed a strategic review, and its quarterly results were scheduled for 4 August. A possible transaction was worth monitoring, but the buyer, firm offer and $95 price were not public before 3 August.",
+    "unknown": "The definitive agreement, offer price, completion of the deal and size of the market reaction were not knowable in advance.",
+    "predictability": "strategic_review_known_terms_uncertain",
+    "publishedAt": "2026-08-03T10:04:52Z",
+    "sources": [
+      {
+        "name": "Atkore merger agreement filing",
+        "url": "https://www.sec.gov/Archives/edgar/data/1666138/000166613826000016/atkr-20260803.htm"
+      },
+      {
+        "name": "Atkore fiscal Q3 results and transaction summary",
+        "url": "https://www.sec.gov/Archives/edgar/data/1666138/000162828026051510/atkr3q26exhibit991.htm"
+      }
+    ]
+  },
+  "2026-08-03:GME": {
+    "status": "verified",
+    "category": "Capital structure",
+    "headline": "GameStop agreed to exchange $1.4 billion of convertible debt for stock",
+    "plainEnglish": "GameStop agreed to retire $1.4 billion of convertible notes by issuing common shares. Although that reduces debt without using cash, the new equity and related hedging created material dilution and selling pressure, explaining the share-price drop.",
+    "knownBefore": "GameStop's convertible debt and the general possibility of future share issuance were already disclosed. The specific $1.4 billion exchange, its timing and the 35-day pricing period were not public before 3 August.",
+    "unknown": "The final number of shares will depend partly on trading during the pricing period, so the eventual dilution and closing remain uncertain.",
+    "predictability": "capital_structure_risk_known_transaction_uncertain",
+    "publishedAt": "2026-08-03T10:12:28Z",
+    "sources": [
+      {
+        "name": "GameStop debt-for-equity exchange filing",
+        "url": "https://www.sec.gov/Archives/edgar/data/1326380/000132638026000042/gme-20260802.htm"
+      },
+      {
+        "name": "GameStop exchange announcement",
+        "url": "https://www.sec.gov/Archives/edgar/data/1326380/000132638026000042/pressreleaseconvertiblenot.htm"
+      }
+    ]
   }
 }

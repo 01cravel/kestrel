@@ -132,7 +132,11 @@ def _downsample(points: List[Dict[str, Any]], maximum: int = 360) -> List[Dict[s
 
 def _yahoo_payload(symbol: str, range_name: str, latest_price: Optional[float]) -> Dict[str, Any]:
     cache = _load_cache()
-    cache_key = f"yahoo:v1:{symbol}:{range_name}"
+    # Long monthly histories are model inputs as well as chart inputs. Keep the
+    # complete monthly sequence instead of applying the denser chart cap, and
+    # version that cache separately so previously thinned series are not reused.
+    cache_version = "v2" if range_name == "all" else "v1"
+    cache_key = f"yahoo:{cache_version}:{symbol}:{range_name}"
     now = int(time.time())
     cached = cache.get(cache_key)
     ttl = 15 * 60 if range_name == "1d" else HISTORY_TTL_SECONDS
@@ -211,7 +215,7 @@ def _yahoo_payload(symbol: str, range_name: str, latest_price: Optional[float]) 
         payload = {
             "symbol": symbol,
             "range": range_name,
-            "points": _downsample(points),
+            "points": _downsample(points, maximum=720 if range_name == "all" else 360),
             "rawPointCount": len(points),
             "fetchedAt": now,
             "source": "Yahoo Finance chart feed",
