@@ -1,4 +1,10 @@
-"""Point-in-time outcome journal for manager-disclosed equity ideas."""
+"""Append-only outcome journal for manager-disclosed equity ideas.
+
+Ideas and their daily observations are appended and never rewritten or pruned.
+Manager skill is judged only on outcomes the adjusted market-history archive can
+verify independently; observation snapshots recorded by Kestrel itself remain
+visible as provisional and never count toward validation.
+"""
 
 from __future__ import annotations
 
@@ -8,10 +14,12 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from outcome_source import STATUS_MATURED, shared_source, verdict
+
 
 ROOT = Path(__file__).resolve().parent
 HISTORY_PATH = ROOT / ".kestrel-investor-history.json"
-MODEL_VERSION = "2026.08.1"
+MODEL_VERSION = "2026.08.2"
 REVIEW_DAYS = (90, 180, 365)
 MINIMUM_VALIDATED_IDEAS = 10
 _LOCK = threading.Lock()
@@ -95,21 +103,41 @@ def record_investor_ideas(rows: List[Dict[str, Any]], benchmark_price: Any) -> D
                 }
                 records.append(record)
                 by_key[key] = record
-            observations = [item for item in record.get("observations", []) if item.get("date") != today]
+            observations = list(record.get("observations") or [])
+            if any(item.get("date") == today for item in observations):
+                continue
             observations.append(row["observation"])
             observations.sort(key=lambda item: str(item.get("date") or ""))
             record["observations"] = observations
 
-        cutoff = dt.date.today() - dt.timedelta(days=8 * 366)
-        records = [row for row in records if _date(row.get("recordedAt")) and _date(row.get("recordedAt")) >= cutoff]
         _save(records)
         return investor_calibration_summary(records)
 
 
-def _outcome(record: Dict[str, Any], days: int) -> Optional[Dict[str, float]]:
+def _outcome(record: Dict[str, Any], days: int) -> Optional[Dict[str, Any]]:
+    """Prefer the independent archive; fall back to Kestrel's own snapshots.
+
+    A snapshot-based result is returned so nothing disappears from view, but it
+    carries ``source: "journal-snapshot"`` and is excluded from validation
+    because its prices are unadjusted and Kestrel recorded them itself.
+    """
     observations = sorted(record.get("observations") or [], key=lambda row: str(row.get("date") or ""))
     if not observations:
         return None
+    first_date = _date(observations[0].get("date"))
+    symbol = str(record.get("symbol") or "")
+    if first_date and symbol:
+        archived = shared_source().outcome(symbol, first_date, days)
+        if archived["status"] == STATUS_MATURED:
+            return {
+                "stockReturn": archived["stockReturn"],
+                "benchmarkReturn": archived["benchmarkReturn"],
+                "excessReturn": archived["excessReturn"],
+                "maxDrawdown": archived["maxDrawdown"],
+                "verdict": archived["verdict"],
+                "source": "archive",
+            }
+
     start = observations[0]
     start_date = _date(start.get("date"))
     start_price = _number(start.get("price"))
@@ -134,6 +162,9 @@ def _outcome(record: Dict[str, Any], days: int) -> Optional[Dict[str, float]]:
         "stockReturn": round(stock_return, 2),
         "benchmarkReturn": round(benchmark_return, 2),
         "excessReturn": round(stock_return - benchmark_return, 2),
+        "maxDrawdown": None,
+        "verdict": verdict(stock_return - benchmark_return),
+        "source": "journal-snapshot",
     }
 
 
@@ -157,18 +188,24 @@ def investor_calibration_summary(records: Optional[List[Dict[str, Any]]] = None)
             if outcome:
                 bucket["outcomes"][str(days)].append(outcome)
 
+    def verified(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [row for row in rows if row.get("source") == "archive"]
+
     public_managers = []
     for manager in managers.values():
-        year = manager["outcomes"]["365"]
+        year = verified(manager["outcomes"]["365"])
+        provisional = len(manager["outcomes"]["365"]) - len(year)
+        decided = [item for item in year if item.get("verdict") != "neutral"]
         average_excess = round(sum(item["excessReturn"] for item in year) / len(year), 2) if year else None
-        hit_rate = round(sum(item["excessReturn"] > 0 for item in year) / len(year) * 100, 1) if year else None
+        hit_rate = round(sum(item["excessReturn"] > 0 for item in decided) / len(decided) * 100, 1) if decided else None
         public_managers.append({
             "id": manager["id"],
             "name": manager["name"],
             "ideasRecorded": manager["ideasRecorded"],
-            "matured90": len(manager["outcomes"]["90"]),
-            "matured180": len(manager["outcomes"]["180"]),
+            "matured90": len(verified(manager["outcomes"]["90"])),
+            "matured180": len(verified(manager["outcomes"]["180"])),
             "matured365": len(year),
+            "provisional365": provisional,
             "averageExcessReturn365": average_excess,
             "hitRate365": hit_rate,
             "validated": len(year) >= MINIMUM_VALIDATED_IDEAS,
@@ -180,5 +217,15 @@ def investor_calibration_summary(records: Optional[List[Dict[str, Any]]] = None)
         "ideasRecorded": sum(item["ideasRecorded"] for item in public_managers),
         "minimumValidatedIdeas": MINIMUM_VALIDATED_IDEAS,
         "managers": public_managers,
-        "method": "New and increased 13F positions measured from the first Kestrel observation against SPY after 90, 180 and 365 days.",
+        "outcomeSource": shared_source().coverage(),
+        "journal": "append-only; ideas and observations are never rewritten or pruned",
+        "method": (
+            "New and increased 13F positions measured against SPY after 90, 180 and 365 days "
+            "using archived split- and dividend-adjusted closes, entered one session after the "
+            "first Kestrel observation."
+        ),
+        "limitations": (
+            "Only archive-verified outcomes count toward validation. Results shown as "
+            "provisional came from Kestrel's own unadjusted snapshots and prove nothing."
+        ),
     }

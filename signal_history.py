@@ -1,4 +1,15 @@
-"""Point-in-time signal journal and simple calibration summaries."""
+"""Append-only signal journal graded against independent adjusted returns.
+
+Two rules hold this file together:
+
+1. A prediction is written once and never altered. A repeat submission for the
+   same day, security and model version is refused, not overwritten, and nothing
+   is ever pruned by age.
+2. Kestrel does not grade its own homework. Outcomes come from the adjusted
+   market-history archive through ``outcome_source``, are measured against SPY
+   after a realistic entry delay, and stay uncounted when the archive cannot
+   support them honestly.
+"""
 
 from __future__ import annotations
 
@@ -8,12 +19,18 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from outcome_source import COST_BAND_PERCENT, STATUS_MATURED, STATUS_PENDING, shared_source
+
 
 ROOT = Path(__file__).resolve().parent
 HISTORY_PATH = ROOT / ".kestrel-signal-history.json"
-MODEL_VERSION = "2026.07.1"
+MODEL_VERSION = "2026.08.1"
 VALID_ACTIONS = {"Hold", "Sell", "Buy", "Ultra Buy"}
 VALID_CONFIDENCE = {"Low", "Medium", "High"}
+REVIEW_DAYS = (30, 90, 180)
+HEADLINE_HORIZON = 30
+BULLISH_ACTIONS = {"Buy", "Ultra Buy"}
+GRADED_ACTIONS = BULLISH_ACTIONS | {"Sell"}
 _LOCK = threading.Lock()
 
 
@@ -39,8 +56,17 @@ def _number(value: Any) -> Optional[float]:
         return None
 
 
+def _date(value: Any) -> Optional[dt.date]:
+    try:
+        return dt.date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def record_signals(rows: List[Dict[str, Any]], evidence_timestamp: Any) -> Dict[str, Any]:
+    """Append today's predictions. Existing records are never rewritten."""
     today = dt.date.today().isoformat()
+    recorded_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     clean = []
     for row in rows[:250]:
         symbol = str(row.get("symbol", "")).upper()
@@ -60,98 +86,124 @@ def record_signals(rows: List[Dict[str, Any]], evidence_timestamp: Any) -> Dict[
             "reason": str(row.get("reason", ""))[:500],
             "evidenceTimestamp": evidence_timestamp,
             "modelVersion": MODEL_VERSION,
+            "recordedAt": recorded_at,
         })
 
     with _LOCK:
         records = _load()
-        replacement_keys = {(row["date"], row["symbol"], row["modelVersion"]) for row in clean}
-        records = [
-            row for row in records
-            if (row.get("date"), row.get("symbol"), row.get("modelVersion")) not in replacement_keys
-        ]
-        records.extend(clean)
-        cutoff = dt.date.today() - dt.timedelta(days=8 * 366)
-        records = [row for row in records if _date(row.get("date")) and _date(row.get("date")) >= cutoff]
+        existing = {(row.get("date"), row.get("symbol"), row.get("modelVersion")) for row in records}
+        appended = 0
+        for row in clean:
+            key = (row["date"], row["symbol"], row["modelVersion"])
+            if key in existing:
+                continue
+            existing.add(key)
+            records.append(row)
+            appended += 1
         records.sort(key=lambda row: (row.get("date", ""), row.get("symbol", "")))
-        _save(records)
-        return calibration_summary(records)
+        if appended:
+            _save(records)
+        summary = calibration_summary(records)
+        summary["predictionsAppended"] = appended
+        summary["duplicatesRefused"] = len(clean) - appended
+        return summary
 
 
-def _date(value: Any) -> Optional[dt.date]:
-    try:
-        return dt.date.fromisoformat(str(value))
-    except (TypeError, ValueError):
+def _matured_outcomes(records: List[Dict[str, Any]], horizon_days: int) -> Dict[str, List[Dict[str, Any]]]:
+    """Grade every actionable prediction at one horizon, keeping the misses visible."""
+    source = shared_source()
+    matured: List[Dict[str, Any]] = []
+    pending = 0
+    ungradeable = 0
+    for row in records:
+        if row.get("action") not in GRADED_ACTIONS:
+            continue
+        outcome = source.outcome(str(row.get("symbol")), row.get("date"), horizon_days)
+        if outcome["status"] == STATUS_MATURED:
+            bullish = row.get("action") in BULLISH_ACTIONS
+            excess = outcome["excessReturn"]
+            if outcome["verdict"] == "neutral":
+                correct = None
+            else:
+                correct = excess > 0 if bullish else excess < 0
+            matured.append({**row, **outcome, "correct": correct})
+        elif outcome["status"] == STATUS_PENDING:
+            pending += 1
+        else:
+            ungradeable += 1
+    return {"matured": matured, "pending": pending, "ungradeable": ungradeable}
+
+
+def _rate(rows: List[Dict[str, Any]]) -> Optional[float]:
+    decided = [row for row in rows if row.get("correct") is not None]
+    if not decided:
         return None
+    return round(sum(bool(row["correct"]) for row in decided) / len(decided) * 100, 1)
+
+
+def _average(values: List[Optional[float]]) -> Optional[float]:
+    usable = [value for value in values if value is not None]
+    return round(sum(usable) / len(usable), 2) if usable else None
 
 
 def calibration_summary(records: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     if records is None:
         with _LOCK:
             records = _load()
-    by_symbol: Dict[str, List[Dict[str, Any]]] = {}
-    for row in records:
-        by_symbol.setdefault(str(row.get("symbol")), []).append(row)
-    for rows in by_symbol.values():
-        rows.sort(key=lambda row: row.get("date", ""))
 
-    outcomes = []
-    for row in records:
-        if row.get("action") not in {"Buy", "Ultra Buy", "Sell"}:
-            continue
-        start_date = _date(row.get("date"))
-        start_price = _number(row.get("price"))
-        if not start_date or not start_price:
-            continue
-        target_date = start_date + dt.timedelta(days=30)
-        candidates = []
-        for future in by_symbol.get(str(row.get("symbol")), []):
-            future_date = _date(future.get("date"))
-            if future_date and target_date <= future_date <= target_date + dt.timedelta(days=15):
-                candidates.append((future_date, future))
-        if not candidates:
-            continue
-        _, future = min(candidates, key=lambda item: item[0])
-        future_price = _number(future.get("price"))
-        if not future_price:
-            continue
-        change = (future_price - start_price) / start_price * 100
-        correct = change > 0 if row.get("action") in {"Buy", "Ultra Buy"} else change < 0
-        period_prices = [
-            _number(point.get("price")) for point in by_symbol.get(str(row.get("symbol")), [])
-            if _date(point.get("date")) and start_date <= _date(point.get("date")) <= target_date
-        ]
-        period_prices = [price for price in period_prices if price is not None]
-        drawdown = ((min(period_prices) - start_price) / start_price * 100) if period_prices else None
-        outcomes.append({**row, "return": change, "correct": correct, "drawdown": drawdown})
+    source = shared_source()
+    coverage = source.coverage()
+    horizons: Dict[str, Any] = {}
+    for days in REVIEW_DAYS:
+        graded = _matured_outcomes(records, days)
+        matured = graded["matured"]
+        horizons[str(days)] = {
+            "maturedSignals": len(matured),
+            "awaitingOutcome": graded["pending"],
+            "notGradeable": graded["ungradeable"],
+            "hitRate": _rate(matured),
+            "highConfidenceHitRate": _rate([row for row in matured if row.get("confidence") == "High"]),
+            "neutralResults": sum(1 for row in matured if row.get("verdict") == "neutral"),
+            "averageExcessReturn": _average([row.get("excessReturn") for row in matured]),
+            "averageBuyDrawdown": _average([
+                row.get("maxDrawdown") for row in matured if row.get("action") in BULLISH_ACTIONS
+            ]),
+        }
 
-    actionable = [row for row in records if row.get("action") in {"Buy", "Ultra Buy", "Sell"}]
+    headline = horizons[str(HEADLINE_HORIZON)]
+    actionable = [row for row in records if row.get("action") in GRADED_ACTIONS]
     recorded_dates = sorted({row.get("date") for row in records if row.get("date")})
-    high_outcomes = [row for row in outcomes if row.get("confidence") == "High"]
-    buy_outcomes = [row for row in outcomes if row.get("action") in {"Buy", "Ultra Buy"}]
     first_review = None
     if actionable:
-        first_date = min((_date(row.get("date")) for row in actionable), default=None)
+        first_date = min((_date(row.get("date")) for row in actionable if _date(row.get("date"))), default=None)
         if first_date:
-            first_review = (first_date + dt.timedelta(days=30)).isoformat()
-
-    def hit_rate(rows: List[Dict[str, Any]]) -> Optional[float]:
-        return round(sum(bool(row.get("correct")) for row in rows) / len(rows) * 100, 1) if rows else None
-
-    average_drawdown = None
-    drawdowns = [_number(row.get("drawdown")) for row in buy_outcomes]
-    drawdowns = [value for value in drawdowns if value is not None]
-    if drawdowns:
-        average_drawdown = round(sum(drawdowns) / len(drawdowns), 1)
+            first_review = (first_date + dt.timedelta(days=HEADLINE_HORIZON)).isoformat()
 
     return {
         "modelVersion": MODEL_VERSION,
         "recordedDays": len(recorded_dates),
         "signalsRecorded": len(records),
         "actionableSignals": len(actionable),
-        "maturedSignals": len(outcomes),
-        "hitRate": hit_rate(outcomes),
-        "highConfidenceHitRate": hit_rate(high_outcomes),
-        "averageBuyDrawdown": average_drawdown,
+        "maturedSignals": headline["maturedSignals"],
+        "hitRate": headline["hitRate"],
+        "highConfidenceHitRate": headline["highConfidenceHitRate"],
+        "averageBuyDrawdown": headline["averageBuyDrawdown"],
+        "averageExcessReturn": headline["averageExcessReturn"],
         "firstReviewDate": first_review,
-        "method": "30-day directional check using point-in-time daily snapshots",
+        "horizons": horizons,
+        "outcomeSource": coverage,
+        "costBandPercent": COST_BAND_PERCENT,
+        "journal": "append-only; predictions are never rewritten, replaced or pruned",
+        "method": (
+            "Benchmark-relative total return against SPY, measured from the archived "
+            "split- and dividend-adjusted close one session after each decision. "
+            "Results inside the declared cost band count as neither a hit nor a miss."
+        ),
+        "limitations": (
+            "Hit rate is a diagnostic, not a calibration result. Confidence describes "
+            "evidence completeness and is not a forecast probability."
+            if coverage["status"] == "ready" else
+            "No outcomes can be graded yet: the adjusted market-history archive is empty, "
+            "so Kestrel reports no result rather than grading itself."
+        ),
     }

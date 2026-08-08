@@ -21,7 +21,9 @@ from zoneinfo import ZoneInfo
 from analyst_data import fetch_analyst_intelligence
 from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_named_analysts
 from catalyst_watch import catalyst_watch_snapshot
+from earnings_calendar import earnings_context, earnings_radar
 from investor_history import investor_calibration_summary, record_investor_ideas
+from learning import learning_status
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
 from mover_autopsy import mover_snapshot
 from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
@@ -671,6 +673,25 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/investor-calibration":
             self.send_json(investor_calibration_summary())
+            return
+        if parsed.path == "/api/earnings":
+            symbol = (urllib.parse.parse_qs(parsed.query).get("symbol") or [""])[0].upper()
+            if not symbol.isalnum():
+                self.send_json({"ok": False, "message": "A ticker is required"}, status=400)
+                return
+            try:
+                self.send_json(earnings_context(symbol))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
+        if parsed.path == "/api/earnings-radar":
+            try:
+                self.send_json(earnings_radar(all_symbols()))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
+        if parsed.path == "/api/learning":
+            self.send_json(learning_status())
             return
         super().do_GET()
 
