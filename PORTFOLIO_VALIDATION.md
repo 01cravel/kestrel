@@ -27,7 +27,21 @@ must name a content-addressed snapshot and manifest that the ledger can rebuild
 and verify. The snapshot is write-once: included and excluded members, stable
 identities, evidence cutoffs and ETF holdings cannot be updated or deleted.
 Later outcomes append separately, and a delisted instrument is incomplete until
-its proceeds and currency have independent source evidence.
+its transaction terms have independent source evidence. Each outcome preserves
+valid-through, effective, availability and retrieval time; stable identity;
+currency; adjustment definition; source record ID; raw/derived source hashes;
+and a payload hash. Ordinary survivors must have a continuous same-currency
+point-in-time total-return path. Ticker changes are followed only through the
+same stable identity.
+
+An inactive listing is not enough to finish a delisting. Kestrel also requires
+a matching dated SEC or official issuer record. Cash consideration needs the
+explicit per-share proceeds and ISO currency. Stock consideration needs the
+successor's stable identity, conversion ratio and a same-currency adjusted path
+through the test horizon. Disappearance, missing sessions, late evidence,
+ambiguous terms and conflicts append `missing` or `conflict` states and keep the
+fold closed. Reprocessing identical evidence is idempotent; a correction adds a
+new recorded-time version and never changes the old one.
 
 ## Chronological test
 

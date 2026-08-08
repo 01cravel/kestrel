@@ -29,6 +29,15 @@ class _BrokenMarketStore:
         raise server.sqlite3.OperationalError("missing schema")
 
 
+class _Outcomes:
+    def __init__(self):
+        self.recorded_at = None
+
+    def capture(self, recorded_at=None):
+        self.recorded_at = recorded_at
+        return {"status": "captured", "recorded": 1}
+
+
 class UniverseServerTests(unittest.TestCase):
     def setUp(self):
         with server.STATE_LOCK:
@@ -138,6 +147,18 @@ class UniverseServerTests(unittest.TestCase):
             result = server.freeze_daily_universe(saturday)
         self.assertEqual(result["status"], "waiting")
         self.assertIsNone(ledger.arguments)
+
+    def test_daily_workflow_advances_outcomes_after_freeze(self):
+        instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
+        outcomes = _Outcomes()
+        with (
+            patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
+            patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
+        ):
+            result = server.update_daily_universe_ledger(instant)
+        self.assertEqual(result["snapshot"]["status"], "captured")
+        self.assertEqual(result["outcomes"]["recorded"], 1)
+        self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
 
 
 if __name__ == "__main__":

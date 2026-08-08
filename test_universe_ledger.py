@@ -8,6 +8,15 @@ from pathlib import Path
 from universe_ledger import PROTOCOL_VERSION, UniverseLedger, security_master_members
 
 
+OUTCOME_PROVENANCE = {
+    "effective_at": "2027-08-07T20:00:00Z",
+    "available_at": "2027-08-08T10:00:00Z",
+    "retrieved_at": "2027-08-08T11:00:00Z",
+    "currency": "USD", "adjustment_definition": "point_in_time_total_return",
+    "source_record_hash": "a" * 64, "evidence_hash": "b" * 64,
+}
+
+
 def member(symbol="AAA", security_id="FIGI:AAA", **changes):
     row = {
         "ticker": symbol, "securityId": security_id, "active": True,
@@ -132,12 +141,15 @@ class UniverseLedgerTests(unittest.TestCase):
             valid_through="2027-08-07", status="complete", source="Official total-return archive",
             source_record_id="AAA-2027-08-07", payload={"totalReturn": 0.12},
             recorded_at="2027-08-08T12:00:00Z",
+            **OUTCOME_PROVENANCE,
         )
         ready = self.ledger.build_protocol(result["snapshotId"], ["AAA"], "VT", 10)
         self.assertEqual(ready["status"], "ready")
         self.assertTrue(ready["ledgerVerified"])
         self.assertTrue(ready["survivorshipFree"])
         self.assertTrue(ready["universeRecords"]["AAA"]["outcomeComplete"])
+        self.assertEqual(ready["universeRecords"]["AAA"]["outcomeStatus"], "complete")
+        self.assertEqual(self.ledger.latest()["outcomeStates"], {"complete": 1})
 
     def test_short_outcome_path_cannot_certify_an_annual_window(self):
         result = self.capture()
@@ -146,6 +158,10 @@ class UniverseLedgerTests(unittest.TestCase):
             valid_through="2026-12-31", status="complete", source="Official total-return archive",
             source_record_id="AAA-2026-12-31", payload={"totalReturn": 0.05},
             recorded_at="2027-01-02T12:00:00Z",
+            effective_at="2026-12-31T20:00:00Z",
+            available_at="2027-01-02T10:00:00Z", retrieved_at="2027-01-02T11:00:00Z",
+            currency="USD", adjustment_definition="point_in_time_total_return",
+            source_record_hash="c" * 64, evidence_hash="d" * 64,
         )
         protocol = self.ledger.build_protocol(result["snapshotId"], ["AAA"], "VT", 10)
         self.assertFalse(protocol["survivorshipFree"])
@@ -176,6 +192,23 @@ class UniverseLedgerTests(unittest.TestCase):
                 snapshot_id=result["snapshotId"], security_id="FIGI:AAA",
                 valid_through="2027-01-01", status="delisted_complete",
                 source="Exchange notice", source_record_id="delist-1", delisted_on="2027-01-01",
+                effective_at="2027-01-01T20:00:00Z", available_at="2027-01-02T10:00:00Z",
+                retrieved_at="2027-01-02T11:00:00Z", recorded_at="2027-01-02T12:00:00Z",
+                currency="USD", adjustment_definition="point_in_time_total_return",
+                source_record_hash="e" * 64, evidence_hash="f" * 64,
+            )
+
+    def test_outcome_rejects_unrecognized_adjustment_definition(self):
+        result = self.capture()
+        with self.assertRaisesRegex(ValueError, "adjustment definition"):
+            self.ledger.append_outcome(
+                snapshot_id=result["snapshotId"], security_id="FIGI:AAA",
+                valid_through="2027-08-07", status="complete",
+                source="Archive", source_record_id="row-1", payload={"totalReturn": 0.1},
+                recorded_at="2027-08-08T12:00:00Z", effective_at="2027-08-07T20:00:00Z",
+                available_at="2027-08-08T10:00:00Z", retrieved_at="2027-08-08T11:00:00Z",
+                currency="USD", adjustment_definition="split_only",
+                source_record_hash="1" * 64, evidence_hash="2" * 64,
             )
 
     def test_live_adapter_does_not_claim_activity_without_a_current_quote(self):
