@@ -42,11 +42,32 @@ def evidence(**changes):
 
 
 def lookthrough(**changes):
+    payload = {
+        "archiveEvidence": True, "fundSecurityId": "FIGI:FUND-VTI",
+        "shareClassId": "FIGI:CLASS-VTI", "holdingsReportId": "holdings-1",
+        "feeReportId": "fees-1", "reportingLagDays": 1, "maxReportingLagDays": 75,
+        "baseCurrency": "USD", "weightUnit": "percent", "reportedTotalWeight": 100.0,
+        "coverageComplete": True, "cashResolved": True, "derivativesResolved": True,
+        "currencyResolved": True,
+        "positions": [{"positionType": "cash", "name": "USD", "reportedWeight": 100.0}],
+        "fees": {"netExpenseRatio": 0.03, "feeUnit": "percent"},
+        "sources": [
+            {"documentId": "document-1", "sourceRecordId": "issuer-holdings-1",
+             "url": "https://issuer.example/holdings.csv", "sha256": "a" * 64},
+            {"documentId": "document-2", "sourceRecordId": "issuer-fees-1",
+             "url": "https://issuer.example/fees.pdf", "sha256": "b" * 64},
+        ],
+    }
+    payload.update(changes.pop("payload", {}))
     row = {
         "asOf": "2026-08-07", "availableAt": "2026-08-07T19:00:00Z",
-        "complete": True, "source": "ETF issuer holdings",
-        "payload": {"fundOverlaps": {}, "fundsReady": 6, "fundsTotal": 6},
+        "retrievedAt": "2026-08-07T19:05:00Z", "complete": True,
+        "source": "Archived issuer/SEC ETF evidence",
+        "fundSecurityId": "FIGI:FUND-VTI", "shareClassId": "FIGI:CLASS-VTI",
+        "payload": payload,
     }
+    if "availableAt" in changes and "retrievedAt" not in changes:
+        row["retrievedAt"] = changes["availableAt"]
     row.update(changes)
     return row
 
@@ -184,6 +205,28 @@ class UniverseLedgerTests(unittest.TestCase):
         self.assertEqual(len(protocol["manifestHashes"]), 2)
         self.assertEqual(len(protocol["lookthroughSnapshots"]), 2)
         self.assertTrue(protocol["ledgerVerified"])
+        self.assertTrue(protocol["archivedLookthroughComplete"])
+        self.assertEqual(protocol["lookthroughSnapshots"][0]["availableAt"],
+                         "2026-08-07T19:00:00Z")
+        self.assertEqual(protocol["lookthroughSnapshots"][0]["retrievedAt"],
+                         "2026-08-07T19:05:00Z")
+
+    def test_legacy_live_lookthrough_cannot_open_archived_evidence_gate(self):
+        result = self.capture(lookthrough=[{
+            "asOf": "2026-08-07", "availableAt": "2026-08-07T19:00:00Z",
+            "retrievedAt": "2026-08-07T19:05:00Z", "complete": True,
+            "source": "Live issuer holdings", "payload": {"fundsReady": 6},
+        }])
+        self.ledger.append_outcome(
+            snapshot_id=result["snapshotId"], security_id="FIGI:AAA",
+            valid_through="2027-08-07", status="complete", source="Official total-return archive",
+            source_record_id="AAA-2027-08-07", payload={"totalReturn": 0.12},
+            recorded_at="2027-08-08T12:00:00Z", **OUTCOME_PROVENANCE,
+        )
+        protocol = self.ledger.build_protocol(result["snapshotId"], ["AAA"], "VT", 10)
+        self.assertEqual(protocol["status"], "accumulating")
+        self.assertFalse(protocol["archivedLookthroughComplete"])
+        self.assertTrue(protocol["survivorshipFree"])
 
     def test_delisting_requires_proceeds_currency_and_source_evidence(self):
         result = self.capture()

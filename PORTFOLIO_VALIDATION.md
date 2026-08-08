@@ -13,10 +13,23 @@ record for inactive and delisted instruments. Every price observation needs its
 own availability date and point-in-time total-return adjustment policy. Each
 fold also needs a complete ETF holdings snapshot that was available at its
 cutoff; today's look-through is never substituted into the past.
+That snapshot must link to immutable archived holdings and fee report IDs for
+the exact fund share class. It retains the holdings as-of date, publication,
+first-availability and retrieval times, reporting lag, source record ID or SEC
+accession, URL and SHA-256 hashes. A current issuer response without that chain
+is descriptive only and cannot certify a fold.
 The no-cost market archive may open those controls only when every declared
 portfolio symbol has a timely adjusted close, a stable point-in-time identity,
 and retained raw split and dividend request proofs spanning the decision date.
 Missing or late evidence produces no partial certified snapshot.
+
+Holdings preserve the source's units, currency and reported weights without
+normalization. The source-reported total must be complete; Kestrel does not
+infer missing weights or rescale a partial list. Cash remains explicit, and
+derivatives retain contract/notional evidence. Unresolved cash, derivatives,
+coverage, currency, fee evidence or share-class identity closes the fold. Mixed
+currencies are not aggregated unless a separate, point-in-time conversion rule
+and evidence are present.
 
 Current-ticker downloads do not meet this standard. They remain useful for
 descriptive research, but Kestrel reports zero eligible unseen windows until a
@@ -42,6 +55,9 @@ through the test horizon. Disappearance, missing sessions, late evidence,
 ambiguous terms and conflicts append `missing` or `conflict` states and keep the
 fold closed. Reprocessing identical evidence is idempotent; a correction adds a
 new recorded-time version and never changes the old one.
+Duplicate or amended N-PORT filings are separate content-addressed records and
+must point to the record they supersede. The protocol exposes exact availability
+and retrieval timestamps rather than truncating them to dates.
 
 ## Chronological test
 

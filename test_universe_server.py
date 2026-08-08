@@ -95,7 +95,7 @@ class UniverseServerTests(unittest.TestCase):
         self.assertFalse(ledger.arguments["controls"]["pointInTimePrices"])
         self.assertEqual(ledger.arguments["controls"]["adjustmentPolicy"], "unverified")
 
-    def test_certified_archive_opens_point_in_time_price_and_action_controls(self):
+    def test_price_archive_cannot_certify_live_unarchived_etf_holdings(self):
         ledger = _Ledger()
         instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
         certification = {
@@ -111,17 +111,10 @@ class UniverseServerTests(unittest.TestCase):
         ):
             result = server.freeze_daily_universe(instant)
         self.assertEqual(result["status"], "captured")
-        self.assertEqual(
-            ledger.arguments["selection_policy_version"],
-            server.CERTIFIED_UNIVERSE_SELECTION_POLICY,
-        )
-        self.assertEqual(ledger.arguments["members"], certification["members"])
-        self.assertEqual(ledger.arguments["evidence"], certification["evidence"])
-        self.assertTrue(ledger.arguments["controls"]["pointInTimePrices"])
-        self.assertEqual(
-            ledger.arguments["controls"]["adjustmentPolicy"],
-            "point_in_time_total_return",
-        )
+        self.assertEqual(ledger.arguments["selection_policy_version"], server.UNIVERSE_SELECTION_POLICY)
+        self.assertNotEqual(ledger.arguments["members"], certification["members"])
+        self.assertFalse(ledger.arguments["controls"]["pointInTimePrices"])
+        self.assertEqual(ledger.arguments["controls"]["adjustmentPolicy"], "unverified")
 
     def test_broken_optional_archive_still_freezes_a_fail_closed_manifest(self):
         ledger = _Ledger()

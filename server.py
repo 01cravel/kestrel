@@ -236,8 +236,9 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
     if source_dates and lookthrough_available and lookthrough_available <= cutoff:
         lookthrough.append({
             "asOf": min(source_dates), "availableAt": lookthrough_available,
+            "retrievedAt": lookthrough_available,
             "complete": lookthrough_payload.get("complete") is True,
-            "source": "Official ETF issuer holdings",
+            "source": "Live official ETF issuer holdings (descriptive only)",
             "payload": lookthrough_payload,
         })
     try:
@@ -251,7 +252,11 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
         certification = {"status": "unavailable"}
     certified = bool(
         certification.get("status") == "ready" and lookthrough_payload.get("complete") is True
-        and lookthrough
+        and lookthrough and all(
+            row.get("complete") is True
+            and (row.get("payload") or {}).get("archiveEvidence") is True
+            for row in lookthrough
+        )
     )
     members = (
         certification["members"] if certified

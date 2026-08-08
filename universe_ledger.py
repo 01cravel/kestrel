@@ -24,8 +24,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATABASE = ROOT / ".kestrel-data" / "universe" / "universe-ledger.sqlite3"
-SCHEMA_VERSION = 2
-PROTOCOL_VERSION = "bitemporal-universe-v2"
+SCHEMA_VERSION = 3
+PROTOCOL_VERSION = "bitemporal-universe-v3"
 COMPLETE_OUTCOMES = {"complete", "delisted_complete"}
 OUTCOME_STATUSES = {"pending", "complete", "missing", "conflict", "delisted_complete"}
 ADJUSTMENT_DEFINITIONS = {"point_in_time_total_return"}
@@ -232,6 +232,16 @@ class UniverseLedger:
         for name, definition in additions.items():
             if name not in outcome_columns:
                 connection.execute(f"ALTER TABLE outcome_versions ADD COLUMN {name} {definition}")
+        lookthrough_columns = {row[1] for row in connection.execute("PRAGMA table_info(lookthrough_versions)")}
+        lookthrough_additions = {
+            "retrieved_at": "TEXT", "fund_security_id": "TEXT",
+            "share_class_id": "TEXT", "holdings_report_id": "TEXT",
+            "fee_report_id": "TEXT", "reporting_lag_days": "INTEGER",
+            "source_hashes_json": "TEXT",
+        }
+        for name, definition in lookthrough_additions.items():
+            if name not in lookthrough_columns:
+                connection.execute(f"ALTER TABLE lookthrough_versions ADD COLUMN {name} {definition}")
         immutable_tables = (
             "universe_snapshots", "identity_versions", "snapshot_members",
             "evidence_versions", "lookthrough_versions", "outcome_versions",
@@ -338,16 +348,59 @@ class UniverseLedger:
     def _normalize_lookthrough(row: Dict[str, Any], cutoff: str) -> Dict[str, Any]:
         as_of = _date(row.get("asOf"))
         available_at = _utc(row.get("availableAt"))
+        retrieved_at = _utc(row.get("retrievedAt"))
         source = str(row.get("source") or "").strip()
-        if not as_of or not available_at or not source:
-            raise ValueError("ETF look-through requires as-of date, exact availability time and source")
-        if available_at > cutoff:
-            raise ValueError("ETF look-through published after the cutoff cannot enter the snapshot")
+        if not as_of or not available_at or not retrieved_at or not source:
+            raise ValueError("ETF look-through requires as-of date, exact availability/retrieval times and source")
+        if available_at > cutoff or retrieved_at > cutoff:
+            raise ValueError("ETF look-through learned after the cutoff cannot enter the snapshot")
+        if available_at > retrieved_at:
+            raise ValueError("ETF look-through cannot be retrieved before it was available")
         payload = row.get("payload") or {}
+        fund_security_id = str(row.get("fundSecurityId") or payload.get("fundSecurityId") or "").strip() or None
+        share_class_id = str(row.get("shareClassId") or payload.get("shareClassId") or "").strip() or None
+        holdings_report_id = str(payload.get("holdingsReportId") or "").strip() or None
+        fee_report_id = str(payload.get("feeReportId") or "").strip() or None
+        lag = payload.get("reportingLagDays")
+        lag = int(lag) if isinstance(lag, int) and not isinstance(lag, bool) else None
+        max_lag = payload.get("maxReportingLagDays")
+        max_lag = int(max_lag) if isinstance(max_lag, int) and not isinstance(max_lag, bool) else None
+        weight_unit = payload.get("weightUnit")
+        reported_total = _finite(payload.get("reportedTotalWeight"))
+        expected_total = 100.0 if weight_unit == "percent" else 1.0 if weight_unit == "fraction" else None
+        tolerance = 5.0 if weight_unit == "percent" else 0.05 if weight_unit == "fraction" else None
+        total_complete = bool(
+            expected_total is not None and reported_total is not None
+            and expected_total - tolerance <= reported_total <= expected_total + tolerance
+        )
+        sources = payload.get("sources") or []
+        source_hashes = []
+        sources_complete = bool(sources)
+        for item in sources:
+            sha = _sha256(item.get("sha256")) if isinstance(item, dict) else None
+            complete_item = bool(
+                isinstance(item, dict) and item.get("documentId") and item.get("sourceRecordId")
+                and item.get("url") and sha
+            )
+            sources_complete = sources_complete and complete_item
+            if sha:
+                source_hashes.append(sha)
+        archive_complete = bool(
+            payload.get("archiveEvidence") is True and fund_security_id and share_class_id
+            and holdings_report_id and fee_report_id and lag is not None and lag >= 0
+            and max_lag is not None and lag <= max_lag
+            and total_complete and payload.get("coverageComplete") is True
+            and payload.get("cashResolved") is True and payload.get("derivativesResolved") is True
+            and payload.get("currencyResolved") is True and payload.get("baseCurrency")
+            and payload.get("positions") and sources_complete
+        )
         payload_hash = _digest(payload)
         normalized = {
-            "asOf": as_of, "availableAt": available_at,
-            "complete": row.get("complete") is True, "source": source,
+            "asOf": as_of, "availableAt": available_at, "retrievedAt": retrieved_at,
+            "complete": row.get("complete") is True and archive_complete, "source": source,
+            "fundSecurityId": fund_security_id, "shareClassId": share_class_id,
+            "holdingsReportId": holdings_report_id, "feeReportId": fee_report_id,
+            "reportingLagDays": lag, "sourceHashes": sorted(set(source_hashes)),
             "payloadHash": payload_hash, "payload": payload,
         }
         normalized["lookthroughId"] = _digest(normalized)
@@ -405,8 +458,11 @@ class UniverseLedger:
             "identityHashes": sorted(row["contentHash"] for row in identities),
             "evidence": sorted((row["category"], row["recordKey"], row["payloadHash"],
                                 row["availableAt"], row["retrievedAt"]) for row in normalized_evidence),
-            "lookthrough": sorted((row["asOf"], row["availableAt"], row["payloadHash"],
-                                   row["complete"]) for row in normalized_lookthrough),
+            "lookthrough": sorted((row["asOf"], row["availableAt"], row["retrievedAt"],
+                                   row["fundSecurityId"], row["shareClassId"],
+                                   row["holdingsReportId"], row["feeReportId"],
+                                   row["payloadHash"], row["complete"])
+                                  for row in normalized_lookthrough),
             "controls": control_values, "issues": issues,
         }
         manifest_hash = _digest(manifest)
@@ -462,9 +518,17 @@ class UniverseLedger:
                 )
             for row in normalized_lookthrough:
                 connection.execute(
-                    "INSERT INTO lookthrough_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    """INSERT INTO lookthrough_versions
+                       (lookthrough_id, snapshot_id, as_of, available_at, complete, source,
+                        payload_hash, payload_json, retrieved_at, fund_security_id,
+                        share_class_id, holdings_report_id, fee_report_id,
+                        reporting_lag_days, source_hashes_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (row["lookthroughId"], snapshot_id, row["asOf"], row["availableAt"],
-                     int(row["complete"]), row["source"], row["payloadHash"], _canonical(row["payload"])),
+                     int(row["complete"]), row["source"], row["payloadHash"], _canonical(row["payload"]),
+                     row["retrievedAt"], row["fundSecurityId"], row["shareClassId"],
+                     row["holdingsReportId"], row["feeReportId"], row["reportingLagDays"],
+                     _canonical(row["sourceHashes"])),
                 )
             connection.commit()
         return {"status": "captured", "snapshotId": snapshot_id,
@@ -682,17 +746,36 @@ class UniverseLedger:
             }
         chain = [self.reconstruct(value) for value in related_ids]
         chain_clean = bool(chain) and all(item.get("status") == "verified" for item in chain)
-        lookthrough_by_version: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        lookthrough_by_version: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        chain_has_archived_lookthrough = []
         for frozen in chain:
-            for row in frozen.get("lookthrough") or []:
+            frozen_rows = frozen.get("lookthrough") or []
+            chain_has_archived_lookthrough.append(bool(frozen_rows) and all(
+                bool(row["complete"])
+                and json.loads(row["payload_json"]).get("archiveEvidence") is True
+                and bool(row.get("retrieved_at") and row.get("holdings_report_id")
+                         and row.get("fee_report_id"))
+                for row in frozen_rows
+            ))
+            for row in frozen_rows:
                 payload = json.loads(row["payload_json"])
-                lookthrough_by_version[(row["payload_hash"], row["available_at"])] = {
-                    **payload, "asOf": row["as_of"], "availableAt": row["available_at"][:10],
+                lookthrough_by_version[(row["payload_hash"], row["available_at"],
+                                        row.get("retrieved_at") or "")] = {
+                    **payload, "asOf": row["as_of"], "availableAt": row["available_at"],
+                    "retrievedAt": row.get("retrieved_at"),
+                    "fundSecurityId": row.get("fund_security_id"),
+                    "shareClassId": row.get("share_class_id"),
+                    "holdingsReportId": row.get("holdings_report_id"),
+                    "feeReportId": row.get("fee_report_id"),
+                    "reportingLagDays": row.get("reporting_lag_days"),
+                    "sourceHashes": json.loads(row.get("source_hashes_json") or "[]"),
                     "complete": bool(row["complete"]), "contentHash": row["payload_hash"],
                 }
         lookthrough = sorted(
-            lookthrough_by_version.values(), key=lambda row: (row["availableAt"], row["contentHash"])
+            lookthrough_by_version.values(),
+            key=lambda row: (row["availableAt"], row.get("retrievedAt") or "", row["contentHash"])
         )
+        archived_lookthrough_complete = bool(chain_has_archived_lookthrough) and all(chain_has_archived_lookthrough)
         control_chain = [item["manifest"].get("controls") or {} for item in chain if item.get("manifest")]
         latest_chain_date = max(
             (_date(item.get("decisionDate")) for item in chain), default=rebuilt["decisionDate"]
@@ -713,8 +796,25 @@ class UniverseLedger:
             and record["outcomeComplete"] and record["securityId"]
             for record in universe_records.values()
         )
+        selection_policy_frozen = bool(control_chain) and all(
+            item.get("selectionPolicyFrozen") is True for item in control_chain
+        )
+        point_in_time_prices = bool(control_chain) and all(
+            item.get("pointInTimePrices") is True for item in control_chain
+        )
+        adjustment_policy = (
+            "point_in_time_total_return"
+            if control_chain and all(item.get("adjustmentPolicy") == "point_in_time_total_return"
+                                     for item in control_chain)
+            else "unverified"
+        )
+        certification_complete = bool(
+            all_records and archived_lookthrough_complete and chain_clean
+            and selection_policy_frozen and point_in_time_prices
+            and adjustment_policy == "point_in_time_total_return"
+        )
         return {
-            "status": "ready" if all_records else "accumulating",
+            "status": "ready" if certification_complete else "accumulating",
             "protocolVersion": PROTOCOL_VERSION, "ledgerVerified": chain_clean,
             "snapshotIds": [item["snapshotId"] for item in chain],
             "manifestHashes": [item["manifestHash"] for item in chain],
@@ -722,22 +822,15 @@ class UniverseLedger:
             "frozenAt": rebuilt["decisionDate"], "universe": expected,
             "universeRecords": universe_records, "benchmark": benchmark,
             "survivorshipFree": all_records,
-            "selectionPolicyFrozen": bool(control_chain) and all(
-                item.get("selectionPolicyFrozen") is True for item in control_chain
-            ),
-            "pointInTimePrices": bool(control_chain) and all(
-                item.get("pointInTimePrices") is True for item in control_chain
-            ),
-            "adjustmentPolicy": (
-                "point_in_time_total_return"
-                if control_chain and all(item.get("adjustmentPolicy") == "point_in_time_total_return"
-                                         for item in control_chain)
-                else "unverified"
-            ),
+            "archivedLookthroughComplete": archived_lookthrough_complete,
+            "selectionPolicyFrozen": selection_policy_frozen,
+            "pointInTimePrices": point_in_time_prices,
+            "adjustmentPolicy": adjustment_policy,
             "oneWayCostBps": one_way_cost_bps,
             "lookthroughSnapshots": lookthrough,
-            "message": ("The frozen universe has complete outcomes."
-                        if all_records else "The frozen universe is valid and is accumulating future outcomes."),
+            "message": ("The frozen universe has complete outcomes and archived ETF evidence."
+                        if certification_complete else
+                        "The frozen universe is accumulating outcomes or archived ETF evidence."),
         }
 
 
