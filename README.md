@@ -16,6 +16,11 @@ Verified company guidance is available on demand at `/api/guidance?symbol=MSFT`.
 
 The local server freezes the first available post-close research universe each US session in an append-only private ledger. When the local market archive contains timely adjusted closes, stable identities, and raw split and dividend request proofs for every declared portfolio symbol, it writes a separate certified snapshot with the point-in-time price/action controls open; otherwise those controls stay closed. `/api/universe-ledger` reports the latest verified manifest and accumulation status; no private ledger data is committed to Git.
 
+The same daily pass now scans no-cost SEC filing packages for explicit merger
+terms. Accepted records keep exact evidence clocks, accession/URL and raw hashes;
+missing or ambiguous terms, unverified issuer domains, item codes, late filings,
+identity mismatches and ticker disappearance never complete a delisting.
+
 ## Run locally
 
 ```sh

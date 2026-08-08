@@ -93,3 +93,11 @@ proceeds; stock or mixed terms follow the stable successor through the annual
 horizon. Missing terms, missing sessions, late records, currency changes,
 conflicts and invalid hashes append an incomplete state. Re-running unchanged
 evidence adds nothing; later corrections append without rewriting history.
+
+`terminal_event_ingestion.py` supplies that structured contract during the
+daily evidence pass. It scans recent SEC filing packages without treating form
+or item codes as transaction facts, and accepts non-filed evidence only from an
+explicit issuer-domain allow-list. A complete row retains its target CIK,
+accession and source URL; publication, availability and retrieval times; exact
+effective date and consideration; and SHA-256 hashes for the source record and
+every raw document. The `issuer_events` table rejects updates and deletes.

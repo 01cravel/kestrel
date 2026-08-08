@@ -43,6 +43,7 @@ from signal_history import calibration_summary, record_signals
 from source_policy import POLICY_VERSION as EVIDENCE_POLICY_VERSION, build_evidence_summary, evidence_policy
 from superinvestors import refresh_superinvestors, superinvestor_snapshot
 from swing_watchlist import swing_watchlist_snapshot
+from terminal_event_ingestion import refresh_sec_terminal_events
 from universe_ledger import UniverseLedger, market_evidence, security_master_members
 from universe_outcomes import UniverseOutcomeCapture
 
@@ -288,8 +289,20 @@ def update_daily_universe_ledger(now: datetime | None = None) -> Dict[str, Any]:
         microsecond=0
     ).isoformat().replace("+00:00", "Z")
     snapshot = freeze_daily_universe(instant)
-    outcomes = UNIVERSE_OUTCOMES.capture(recorded)
-    return {"status": "updated", "snapshot": snapshot, "outcomes": outcomes}
+    # This collector can only add fully evidenced rows. A failed refresh is
+    # reported separately and never relaxes the existing outcome gates.
+    try:
+        terminal_evidence = refresh_sec_terminal_events(
+            all_symbols(), MARKET_HISTORY_STORE.database
+        )
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        terminal_evidence = {"status": "failed", "stored": 0, "reason": str(error)}
+    outcome_recorded = recorded if now is not None else datetime.now(
+        dt_timezone.utc
+    ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    outcomes = UNIVERSE_OUTCOMES.capture(outcome_recorded)
+    return {"status": "updated", "snapshot": snapshot,
+            "terminalEvidence": terminal_evidence, "outcomes": outcomes}
 
 
 def load_cache() -> None:

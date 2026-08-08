@@ -36,7 +36,7 @@ DEFAULT_DATA_DIR = ROOT / ".kestrel-data" / "market-history"
 DEFAULT_DATABASE = DEFAULT_DATA_DIR / "market-history.sqlite3"
 SECRETS_PATH = ROOT / ".kestrel-secrets.json"
 BASE_URL = "https://api.massive.com"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_NAME = "Massive Stocks REST API"
 SOURCE_DOCS = "https://massive.com/docs/rest/stocks"
 DEFAULT_REQUESTS_PER_MINUTE = 5
@@ -297,6 +297,18 @@ class MarketHistoryStore:
             );
             CREATE INDEX IF NOT EXISTS issuer_events_lookup
                 ON issuer_events(ticker, available_at);
+            """
+        )
+        # Issuer evidence is part of the historical truth layer. Corrections
+        # and amendments append distinct rows; prior evidence can never change.
+        connection.executescript(
+            """
+            CREATE TRIGGER IF NOT EXISTS issuer_events_no_update
+                BEFORE UPDATE ON issuer_events BEGIN
+                SELECT RAISE(ABORT, 'immutable issuer event rows cannot be updated'); END;
+            CREATE TRIGGER IF NOT EXISTS issuer_events_no_delete
+                BEFORE DELETE ON issuer_events BEGIN
+                SELECT RAISE(ABORT, 'immutable issuer event rows cannot be deleted'); END;
             """
         )
         connection.execute(

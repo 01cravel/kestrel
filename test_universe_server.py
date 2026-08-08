@@ -153,10 +153,25 @@ class UniverseServerTests(unittest.TestCase):
         outcomes = _Outcomes()
         with (
             patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
+            patch.object(server, "refresh_sec_terminal_events", return_value={"status": "refreshed", "stored": 1}),
             patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
         ):
             result = server.update_daily_universe_ledger(instant)
         self.assertEqual(result["snapshot"]["status"], "captured")
+        self.assertEqual(result["outcomes"]["recorded"], 1)
+        self.assertEqual(result["terminalEvidence"]["stored"], 1)
+        self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
+
+    def test_terminal_ingestion_failure_does_not_weaken_or_skip_outcome_gates(self):
+        instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
+        outcomes = _Outcomes()
+        with (
+            patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
+            patch.object(server, "refresh_sec_terminal_events", side_effect=RuntimeError("SEC unavailable")),
+            patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
+        ):
+            result = server.update_daily_universe_ledger(instant)
+        self.assertEqual(result["terminalEvidence"]["status"], "failed")
         self.assertEqual(result["outcomes"]["recorded"], 1)
         self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
 
