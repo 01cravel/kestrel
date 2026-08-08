@@ -14,6 +14,8 @@ The authoritative-source hierarchy and confidence gates are defined in [SOURCE_P
 
 Verified company guidance is available on demand at `/api/guidance?symbol=MSFT`. The response keeps the exact publication cutoff and range, explains comparable changes in plain English, and never changes valuation or portfolio-risk gates.
 
+The local server freezes the first available post-close research universe each US session in an append-only private ledger. When the local market archive contains timely adjusted closes, stable identities, and raw split and dividend request proofs for every declared portfolio symbol, it writes a separate certified snapshot with the point-in-time price/action controls open; otherwise those controls stay closed. `/api/universe-ledger` reports the latest verified manifest and accumulation status; no private ledger data is committed to Git.
+
 ## Run locally
 
 ```sh

@@ -7,13 +7,14 @@ import json
 import os
 import re
 import socket
+import sqlite3
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from datetime import date, datetime, time as datetime_time
+from datetime import date, datetime, time as datetime_time, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
@@ -23,20 +24,26 @@ from analyst_sources import BENZINGA_API_KEY, named_analyst_snapshot, refresh_na
 from catalyst_watch import catalyst_watch_snapshot
 from company_guidance import sec_guidance_evidence
 from earnings_calendar import earnings_context, earnings_radar
+from feature_store import session_cutoff
+from fund_lookthrough import fund_lookthrough_snapshot
 from investor_history import investor_calibration_summary, record_investor_ideas
 from learning import learning_status
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
+from market_history import MarketHistoryStore
 from macro_regime import macro_regime_snapshot
 from mover_autopsy import mover_snapshot
-from portfolio_science import portfolio_science_snapshot
+from portfolio_science import (
+    CANDIDATE_WEIGHTS, MODEL_VERSION as PORTFOLIO_MODEL_VERSION, portfolio_science_snapshot,
+)
 from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
 from sec_data import verify_with_sec
 from security_master import refresh_security_master, security_master_snapshot
 from sarwa_sync import connection_status, discard_pending, mark_applied, pending_positions, stage_snapshot
 from signal_history import calibration_summary, record_signals
-from source_policy import build_evidence_summary, evidence_policy
+from source_policy import POLICY_VERSION as EVIDENCE_POLICY_VERSION, build_evidence_summary, evidence_policy
 from superinvestors import refresh_superinvestors, superinvestor_snapshot
 from swing_watchlist import swing_watchlist_snapshot
+from universe_ledger import UniverseLedger, market_evidence, security_master_members
 
 
 ROOT = Path(__file__).resolve().parent
@@ -71,6 +78,11 @@ ANALYST_REFRESH_SECONDS = 24 * 60 * 60
 SEC_EXCLUDED_SYMBOLS = {"SPY", "GMOI", "IEMG", "GLD", "BTC"}
 MARKET_SYMBOLS = {"BTC": "BINANCE:BTCUSDT"}
 PORTFOLIO_LOCK = threading.Lock()
+UNIVERSE_LEDGER = UniverseLedger()
+MARKET_HISTORY_STORE = MarketHistoryStore()
+UNIVERSE_SELECTION_POLICY = "configured-research-universe-v1"
+CERTIFIED_UNIVERSE_SELECTION_POLICY = "certified-ideal-portfolio-universe-v1"
+UNIVERSE_CHECK_SECONDS = 15 * 60
 
 
 def clean_positions(raw_positions: Any) -> Dict[str, Dict[str, Any]]:
@@ -180,6 +192,89 @@ def opportunity_universe() -> List[str]:
 
 def all_symbols() -> List[str]:
     return list(dict.fromkeys(HOLDINGS_UNIVERSE + opportunity_universe()))
+
+
+def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
+    """Freeze the first post-close information set that is locally available."""
+    instant = now or datetime.now(dt_timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError("Universe snapshot time must include a timezone")
+    eastern = instant.astimezone(ZoneInfo("America/New_York"))
+    if eastern.weekday() >= 5 or eastern.time() < datetime_time(16, 15):
+        return {"status": "waiting", "message": "The US decision cutoff has not passed."}
+    decision_date = eastern.date().isoformat()
+    # Retain the documented 16:15 cutoff as the lower bound, while recording
+    # the exact later instant at which the complete local information set froze.
+    lower_bound = session_cutoff(decision_date)
+    initial_cutoff = instant.astimezone(dt_timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    if initial_cutoff < lower_bound:
+        return {"status": "waiting", "message": "The US decision cutoff has not passed."}
+    with STATE_LOCK:
+        state_status = STATE["status"]
+        data = dict(STATE["data"])
+    if state_status not in {"ready", "cached"}:
+        return {"status": "waiting", "message": "Market and filing evidence is still refreshing."}
+    symbols = all_symbols()
+    identities = security_master_snapshot(symbols)
+    if identities.get("status") not in {"ready", "cached", "partial"}:
+        return {"status": "waiting", "message": "Security identities are still refreshing."}
+    lookthrough_payload = fund_lookthrough_snapshot(CANDIDATE_WEIGHTS)
+    freeze_instant = instant if now is not None else datetime.now(dt_timezone.utc)
+    cutoff = freeze_instant.astimezone(dt_timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    lookthrough = []
+    source_dates = [str(row.get("asOf") or "") for row in lookthrough_payload.get("sources") or []
+                    if row.get("asOf")]
+    generated_at = lookthrough_payload.get("generatedAt")
+    try:
+        lookthrough_available = datetime.fromtimestamp(
+            int(generated_at), tz=dt_timezone.utc
+        ).isoformat().replace("+00:00", "Z")
+    except (TypeError, ValueError, OSError):
+        lookthrough_available = None
+    if source_dates and lookthrough_available and lookthrough_available <= cutoff:
+        lookthrough.append({
+            "asOf": min(source_dates), "availableAt": lookthrough_available,
+            "complete": lookthrough_payload.get("complete") is True,
+            "source": "Official ETF issuer holdings",
+            "payload": lookthrough_payload,
+        })
+    try:
+        certification = MARKET_HISTORY_STORE.certify_session(
+            decision_date, list(dict.fromkeys(ULTIMATE_PORTFOLIO_SYMBOLS + ["VT"])), cutoff
+        )
+    except sqlite3.Error:
+        # A missing or damaged optional archive can never open certification,
+        # but it must not prevent the ordinary fail-closed manifest from being
+        # frozen for the day.
+        certification = {"status": "unavailable"}
+    certified = bool(
+        certification.get("status") == "ready" and lookthrough_payload.get("complete") is True
+        and lookthrough
+    )
+    members = (
+        certification["members"] if certified
+        else security_master_members(identities, symbols, data, cutoff)
+    )
+    evidence = certification["evidence"] if certified else market_evidence(data, cutoff)
+    return UNIVERSE_LEDGER.capture_snapshot(
+        decision_date=decision_date, cutoff_utc=cutoff, recorded_at=cutoff,
+        model_version=PORTFOLIO_MODEL_VERSION,
+        policy_version=EVIDENCE_POLICY_VERSION,
+        selection_policy_version=(
+            CERTIFIED_UNIVERSE_SELECTION_POLICY if certified else UNIVERSE_SELECTION_POLICY
+        ),
+        members=members, evidence=evidence, lookthrough=lookthrough,
+        controls={
+            "selectionPolicyFrozen": True,
+            # Current live quotes are timestamped, but the portfolio's complete
+            # point-in-time total-return/action archive is not yet certified.
+            "pointInTimePrices": certified,
+            "adjustmentPolicy": (
+                "point_in_time_total_return" if certified else "unverified"
+            ),
+            "oneWayCostBps": 10,
+        },
+    )
 
 
 def load_cache() -> None:
@@ -586,6 +681,9 @@ class KestrelHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/swing-watchlist":
             self.send_json(swing_watchlist_snapshot())
             return
+        if parsed.path == "/api/universe-ledger":
+            self.send_json(UNIVERSE_LEDGER.latest())
+            return
         if parsed.path == "/api/dashboard":
             opportunities = opportunity_universe()
             symbols = list(dict.fromkeys(HOLDINGS_UNIVERSE + opportunities))
@@ -861,6 +959,24 @@ def main() -> None:
         daemon=True,
     )
     manager_worker.start()
+    def universe_snapshot_worker() -> None:
+        while True:
+            try:
+                freeze_daily_universe()
+            except (OSError, RuntimeError, ValueError, sqlite3.Error):
+                # Snapshot health is visible through /api/universe-ledger. A
+                # failed capture never interrupts the dashboard or overwrites a
+                # prior immutable snapshot.
+                pass
+            if threading.Event().wait(UNIVERSE_CHECK_SECONDS):
+                return
+
+    universe_worker = threading.Thread(
+        target=universe_snapshot_worker,
+        name="kestrel-universe-ledger",
+        daemon=True,
+    )
+    universe_worker.start()
     server = ThreadingHTTPServer((HOST, PORT), KestrelHandler)
     print(f"Kestrel is running at http://{HOST}:{PORT}/", flush=True)
     server.serve_forever()

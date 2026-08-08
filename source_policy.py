@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 
-POLICY_VERSION = "2026.08.08.1"
+POLICY_VERSION = "2026.08.08.2"
 
 TIERS = [
     {
@@ -50,6 +50,16 @@ SOURCE_AREAS = [
         "target": "Add ISIN, exchange MIC and local regulator identifiers as direct-market coverage expands",
         "status": "connected",
         "url": "https://www.openfigi.com/api/documentation",
+    },
+    {
+        "id": "historical_universe",
+        "name": "Point-in-time investable universe",
+        "truth": "Append-only daily membership, identity, evidence and outcome manifests backed by regulator and market-reference records",
+        "current": "Immutable bitemporal ledger with stable identities, exact decision cutoffs, retained exclusions, ETF look-through hashes, cutoff-safe archived closes and raw split/dividend coverage proofs",
+        "currentTier": 3,
+        "target": "Accumulate five untouched annual outcome windows and add broader official inactive-listing coverage market by market",
+        "status": "accumulating",
+        "url": "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
     },
     {
         "id": "fundamentals_us",
