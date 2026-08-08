@@ -18,6 +18,8 @@
 .kestrel-secrets.json
 .kestrel-secrets.tmp
 .kestrel-market-integrity.tmp
+.kestrel-macro-cache.json
+.kestrel-macro-cache.json.tmp
 .kestrel-superinvestors.json
 .kestrel-superinvestors.tmp
 kestrel-legacy.html

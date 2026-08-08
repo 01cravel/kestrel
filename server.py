@@ -13,7 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from datetime import datetime, time as datetime_time
+from datetime import date, datetime, time as datetime_time
 from pathlib import Path
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
@@ -25,6 +25,7 @@ from earnings_calendar import earnings_context, earnings_radar
 from investor_history import investor_calibration_summary, record_investor_ideas
 from learning import learning_status
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
+from macro_regime import macro_regime_snapshot
 from mover_autopsy import mover_snapshot
 from portfolio_science import portfolio_science_snapshot
 from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
@@ -543,9 +544,19 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             identity = security_master_snapshot(symbols)
             market = market_integrity_snapshot(symbols, data, identity.get("instruments"))
             named_analysts = named_analyst_snapshot(symbols, data)
+            macro = macro_regime_snapshot()
             self.send_json(evidence_policy(
-                data, sarwa, identity.get("summary"), market.get("summary"), named_analysts.get("summary")
+                data, sarwa, identity.get("summary"), market.get("summary"), named_analysts.get("summary"), macro
             ))
+            return
+        if parsed.path == "/api/macro":
+            raw_cutoff = (urllib.parse.parse_qs(parsed.query).get("as_of") or [""])[0]
+            try:
+                cutoff = date.fromisoformat(raw_cutoff) if raw_cutoff else None
+            except ValueError:
+                self.send_json({"ok": False, "message": "as_of must be YYYY-MM-DD"}, status=400)
+                return
+            self.send_json(macro_regime_snapshot(cutoff))
             return
         if parsed.path == "/api/security-master":
             self.send_json(security_master_snapshot(all_symbols()))
@@ -598,12 +609,14 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             identity = security_master_snapshot(symbols)
             market = market_integrity_snapshot(symbols, payload["data"], identity.get("instruments"))
             named_analysts = named_analyst_snapshot(symbols, payload["data"])
+            macro = macro_regime_snapshot()
             payload["securityMaster"] = identity
             payload["marketIntegrity"] = market
             payload["namedAnalysts"] = named_analysts
             payload["superinvestors"] = superinvestor_snapshot()
+            payload["macroRegime"] = macro
             payload["evidencePolicy"] = build_evidence_summary(
-                payload["data"], sarwa, identity.get("summary"), market.get("summary"), named_analysts.get("summary")
+                payload["data"], sarwa, identity.get("summary"), market.get("summary"), named_analysts.get("summary"), macro
             )
             self.send_json(payload)
             return
