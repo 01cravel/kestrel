@@ -16,6 +16,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -24,8 +25,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATABASE = ROOT / ".kestrel-data" / "universe" / "universe-ledger.sqlite3"
-SCHEMA_VERSION = 2
-PROTOCOL_VERSION = "bitemporal-universe-v2"
+SCHEMA_VERSION = 4
+PROTOCOL_VERSION = "bitemporal-universe-v3"
 COMPLETE_OUTCOMES = {"complete", "delisted_complete"}
 OUTCOME_STATUSES = {"pending", "complete", "missing", "conflict", "delisted_complete"}
 ADJUSTMENT_DEFINITIONS = {"point_in_time_total_return"}
@@ -109,17 +110,116 @@ class UniverseLedger:
     def connect(self, create: bool = True) -> sqlite3.Connection:
         if create:
             self.database.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(str(self.database))
+        connection = sqlite3.connect(str(self.database), timeout=30)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=30000")
+        connection.execute("PRAGMA trusted_schema=OFF")
         if create:
             connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=FULL")
             self._migrate(connection)
         return connection
 
     @staticmethod
     def _migrate(connection: sqlite3.Connection) -> None:
+        tables_before = {str(row[0]) for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        prior_version = 0
+        user_tables_before = {name for name in tables_before if not name.startswith("sqlite_")}
+        if user_tables_before and "ledger_metadata" not in user_tables_before:
+            raise RuntimeError("Unversioned ledger schema cannot be migrated safely")
+        if "ledger_metadata" in tables_before:
+            row = connection.execute(
+                "SELECT value FROM ledger_metadata WHERE key='schema_version'"
+            ).fetchone()
+            try:
+                prior_version = int(row[0]) if row else 0
+            except (TypeError, ValueError) as error:
+                raise RuntimeError("Ledger schema version is invalid") from error
+            if prior_version not in {1, 2, 3, SCHEMA_VERSION}:
+                raise RuntimeError(
+                    f"Ledger schema {prior_version} is incompatible with {SCHEMA_VERSION}"
+                )
+            required_prior = {
+                "ledger_metadata", "universe_snapshots", "identity_versions",
+                "snapshot_members", "evidence_versions", "lookthrough_versions",
+                "outcome_versions",
+            }
+            if prior_version >= 3:
+                required_prior.add("schema_migrations")
+            missing = required_prior - tables_before
+            if missing:
+                raise RuntimeError(
+                    "Ledger schema is incomplete before migration: " + ", ".join(sorted(missing))
+                )
+            if prior_version == SCHEMA_VERSION:
+                outcome_columns = {
+                    str(row[1]) for row in connection.execute("PRAGMA table_info(outcome_versions)")
+                }
+                required_outcomes = {
+                    "effective_at", "available_at", "retrieved_at", "listing_state",
+                    "adjustment_definition", "consideration_json", "source_record_hash",
+                    "evidence_hash",
+                }
+                if not required_outcomes.issubset(outcome_columns):
+                    raise RuntimeError("Current ledger schema is missing required outcome columns")
+                lookthrough_columns = {
+                    str(row[1]) for row in connection.execute("PRAGMA table_info(lookthrough_versions)")
+                }
+                required_lookthrough = {
+                    "retrieved_at", "fund_security_id", "share_class_id",
+                    "holdings_report_id", "fee_report_id", "reporting_lag_days",
+                    "source_hashes_json",
+                }
+                if not required_lookthrough.issubset(lookthrough_columns):
+                    raise RuntimeError("Current ledger schema is missing archived ETF evidence columns")
+                trigger_sql = {str(row[0]): str(row[1] or "").upper() for row in connection.execute(
+                    "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
+                )}
+                immutable_tables = (*sorted(required_prior - {"ledger_metadata"}),)
+                invalid_triggers = []
+                for table in immutable_tables:
+                    for suffix, action, message in (
+                        ("no_update", "UPDATE", "UPDATED"),
+                        ("no_delete", "DELETE", "DELETED"),
+                    ):
+                        name = f"{table}_{suffix}"
+                        sql = trigger_sql.get(name, "")
+                        if (
+                            f"BEFORE {action} ON {table}".upper() not in sql
+                            or "RAISE(ABORT" not in sql
+                            or f"IMMUTABLE LEDGER ROWS CANNOT BE {message}" not in sql
+                        ):
+                            invalid_triggers.append(name)
+                if invalid_triggers:
+                    raise RuntimeError("Current ledger schema is missing immutable triggers")
+                migrations = [tuple(row) for row in connection.execute(
+                    "SELECT version, migration_hash FROM schema_migrations ORDER BY version"
+                )]
+                expected_migrations = [
+                    (version, _digest({
+                        "ledger": "universe", "schemaVersion": version,
+                        "migration": (
+                            "initial-bitemporal-ledger" if version == 1 else
+                            "outcome-provenance" if version == 2 else
+                            "operational-integrity" if version == 3 else
+                            "archived-etf-evidence"
+                        ),
+                    })) for version in range(1, SCHEMA_VERSION + 1)
+                ]
+                if migrations != expected_migrations:
+                    raise RuntimeError("Ledger migration history is incomplete or incompatible")
+                identity = connection.execute(
+                    "SELECT value FROM ledger_metadata WHERE key='database_id'"
+                ).fetchone()
+                if not identity or not _sha256(identity[0]):
+                    raise RuntimeError("Ledger database identity is missing or invalid")
+                return
         connection.executescript(
             """
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS ledger_metadata (
                 key TEXT PRIMARY KEY, value TEXT NOT NULL
             );
@@ -217,6 +317,11 @@ class UniverseLedger:
             );
             CREATE INDEX IF NOT EXISTS outcome_versions_latest
                 ON outcome_versions(snapshot_id, security_id, valid_through, recorded_at);
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL,
+                migration_hash TEXT NOT NULL
+            );
             """
         )
         # Version 2 makes the evidence clock and return definition first-class.
@@ -232,10 +337,35 @@ class UniverseLedger:
         for name, definition in additions.items():
             if name not in outcome_columns:
                 connection.execute(f"ALTER TABLE outcome_versions ADD COLUMN {name} {definition}")
+        lookthrough_columns = {row[1] for row in connection.execute("PRAGMA table_info(lookthrough_versions)")}
+        lookthrough_additions = {
+            "retrieved_at": "TEXT", "fund_security_id": "TEXT",
+            "share_class_id": "TEXT", "holdings_report_id": "TEXT",
+            "fee_report_id": "TEXT", "reporting_lag_days": "INTEGER",
+            "source_hashes_json": "TEXT",
+        }
+        for name, definition in lookthrough_additions.items():
+            if name not in lookthrough_columns:
+                connection.execute(f"ALTER TABLE lookthrough_versions ADD COLUMN {name} {definition}")
         immutable_tables = (
             "universe_snapshots", "identity_versions", "snapshot_members",
             "evidence_versions", "lookthrough_versions", "outcome_versions",
+            "schema_migrations",
         )
+        migration_time = _now()
+        for version in range(1, SCHEMA_VERSION + 1):
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at, migration_hash) VALUES(?, ?, ?)",
+                (version, migration_time, _digest({
+                    "ledger": "universe", "schemaVersion": version,
+                    "migration": (
+                        "initial-bitemporal-ledger" if version == 1 else
+                        "outcome-provenance" if version == 2 else
+                        "operational-integrity" if version == 3 else
+                        "archived-etf-evidence"
+                    ),
+                })),
+            )
         for table in immutable_tables:
             connection.execute(
                 f"""CREATE TRIGGER IF NOT EXISTS {table}_no_update
@@ -248,10 +378,24 @@ class UniverseLedger:
                     SELECT RAISE(ABORT, 'immutable ledger rows cannot be deleted'); END"""
             )
         connection.execute(
-            "INSERT OR REPLACE INTO ledger_metadata(key, value) VALUES('schema_version', ?)",
+            "INSERT INTO ledger_metadata(key, value) VALUES('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (str(SCHEMA_VERSION),),
         )
+        connection.execute(
+            "INSERT OR IGNORE INTO ledger_metadata(key, value) VALUES('database_id', ?)",
+            (hashlib.sha256(os.urandom(32)).hexdigest(),),
+        )
         connection.commit()
+
+        # Migration is complete only when the exact resulting schema passes a
+        # read-only audit. This also catches trigger loss or partial ALTERs.
+        recorded = connection.execute(
+            "SELECT value FROM ledger_metadata WHERE key='schema_version'"
+        ).fetchone()
+        if not recorded or int(recorded[0]) != SCHEMA_VERSION:
+            raise RuntimeError("Ledger migration did not record the expected schema version")
+        UniverseLedger._migrate(connection)
 
     @staticmethod
     def _normalize_member(record: Dict[str, Any], decision_date: str, cutoff: str,
@@ -338,16 +482,59 @@ class UniverseLedger:
     def _normalize_lookthrough(row: Dict[str, Any], cutoff: str) -> Dict[str, Any]:
         as_of = _date(row.get("asOf"))
         available_at = _utc(row.get("availableAt"))
+        retrieved_at = _utc(row.get("retrievedAt"))
         source = str(row.get("source") or "").strip()
-        if not as_of or not available_at or not source:
-            raise ValueError("ETF look-through requires as-of date, exact availability time and source")
-        if available_at > cutoff:
-            raise ValueError("ETF look-through published after the cutoff cannot enter the snapshot")
+        if not as_of or not available_at or not retrieved_at or not source:
+            raise ValueError("ETF look-through requires as-of date, exact availability/retrieval times and source")
+        if available_at > cutoff or retrieved_at > cutoff:
+            raise ValueError("ETF look-through learned after the cutoff cannot enter the snapshot")
+        if available_at > retrieved_at:
+            raise ValueError("ETF look-through cannot be retrieved before it was available")
         payload = row.get("payload") or {}
+        fund_security_id = str(row.get("fundSecurityId") or payload.get("fundSecurityId") or "").strip() or None
+        share_class_id = str(row.get("shareClassId") or payload.get("shareClassId") or "").strip() or None
+        holdings_report_id = str(payload.get("holdingsReportId") or "").strip() or None
+        fee_report_id = str(payload.get("feeReportId") or "").strip() or None
+        lag = payload.get("reportingLagDays")
+        lag = int(lag) if isinstance(lag, int) and not isinstance(lag, bool) else None
+        max_lag = payload.get("maxReportingLagDays")
+        max_lag = int(max_lag) if isinstance(max_lag, int) and not isinstance(max_lag, bool) else None
+        weight_unit = payload.get("weightUnit")
+        reported_total = _finite(payload.get("reportedTotalWeight"))
+        expected_total = 100.0 if weight_unit == "percent" else 1.0 if weight_unit == "fraction" else None
+        tolerance = 5.0 if weight_unit == "percent" else 0.05 if weight_unit == "fraction" else None
+        total_complete = bool(
+            expected_total is not None and reported_total is not None
+            and expected_total - tolerance <= reported_total <= expected_total + tolerance
+        )
+        sources = payload.get("sources") or []
+        source_hashes = []
+        sources_complete = bool(sources)
+        for item in sources:
+            sha = _sha256(item.get("sha256")) if isinstance(item, dict) else None
+            complete_item = bool(
+                isinstance(item, dict) and item.get("documentId") and item.get("sourceRecordId")
+                and item.get("url") and sha
+            )
+            sources_complete = sources_complete and complete_item
+            if sha:
+                source_hashes.append(sha)
+        archive_complete = bool(
+            payload.get("archiveEvidence") is True and fund_security_id and share_class_id
+            and holdings_report_id and fee_report_id and lag is not None and lag >= 0
+            and max_lag is not None and lag <= max_lag
+            and total_complete and payload.get("coverageComplete") is True
+            and payload.get("cashResolved") is True and payload.get("derivativesResolved") is True
+            and payload.get("currencyResolved") is True and payload.get("baseCurrency")
+            and payload.get("positions") and sources_complete
+        )
         payload_hash = _digest(payload)
         normalized = {
-            "asOf": as_of, "availableAt": available_at,
-            "complete": row.get("complete") is True, "source": source,
+            "asOf": as_of, "availableAt": available_at, "retrievedAt": retrieved_at,
+            "complete": row.get("complete") is True and archive_complete, "source": source,
+            "fundSecurityId": fund_security_id, "shareClassId": share_class_id,
+            "holdingsReportId": holdings_report_id, "feeReportId": fee_report_id,
+            "reportingLagDays": lag, "sourceHashes": sorted(set(source_hashes)),
             "payloadHash": payload_hash, "payload": payload,
         }
         normalized["lookthroughId"] = _digest(normalized)
@@ -405,14 +592,18 @@ class UniverseLedger:
             "identityHashes": sorted(row["contentHash"] for row in identities),
             "evidence": sorted((row["category"], row["recordKey"], row["payloadHash"],
                                 row["availableAt"], row["retrievedAt"]) for row in normalized_evidence),
-            "lookthrough": sorted((row["asOf"], row["availableAt"], row["payloadHash"],
-                                   row["complete"]) for row in normalized_lookthrough),
+            "lookthrough": sorted((row["asOf"], row["availableAt"], row["retrievedAt"],
+                                   row["fundSecurityId"], row["shareClassId"],
+                                   row["holdingsReportId"], row["feeReportId"],
+                                   row["payloadHash"], row["complete"])
+                                  for row in normalized_lookthrough),
             "controls": control_values, "issues": issues,
         }
         manifest_hash = _digest(manifest)
         snapshot_id = _digest({"manifestHash": manifest_hash, "cutoffUtc": cutoff})
         status = "complete" if not issues else "incomplete"
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """SELECT snapshot_id, manifest_hash, status FROM universe_snapshots
                    WHERE decision_date=? AND model_version=? AND policy_version=?
@@ -428,7 +619,6 @@ class UniverseLedger:
                         "snapshotStatus": existing["status"], "manifestHash": existing["manifest_hash"],
                         "attemptedManifestHash": manifest_hash,
                         "reason": "A different immutable snapshot already exists for this decision date."}
-            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 "INSERT INTO universe_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (snapshot_id, day, cutoff, recorded, model_version, policy_version,
@@ -462,9 +652,17 @@ class UniverseLedger:
                 )
             for row in normalized_lookthrough:
                 connection.execute(
-                    "INSERT INTO lookthrough_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    """INSERT INTO lookthrough_versions
+                       (lookthrough_id, snapshot_id, as_of, available_at, complete, source,
+                        payload_hash, payload_json, retrieved_at, fund_security_id,
+                        share_class_id, holdings_report_id, fee_report_id,
+                        reporting_lag_days, source_hashes_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (row["lookthroughId"], snapshot_id, row["asOf"], row["availableAt"],
-                     int(row["complete"]), row["source"], row["payloadHash"], _canonical(row["payload"])),
+                     int(row["complete"]), row["source"], row["payloadHash"], _canonical(row["payload"]),
+                     row["retrievedAt"], row["fundSecurityId"], row["shareClassId"],
+                     row["holdingsReportId"], row["feeReportId"], row["reportingLagDays"],
+                     _canonical(row["sourceHashes"])),
                 )
             connection.commit()
         return {"status": "captured", "snapshotId": snapshot_id,
@@ -542,6 +740,7 @@ class UniverseLedger:
         }
         outcome_id = _digest(outcome)
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             member = connection.execute(
                 "SELECT 1 FROM snapshot_members WHERE snapshot_id=? AND security_id=?",
                 (snapshot_id, security_id),
@@ -604,9 +803,53 @@ class UniverseLedger:
             "payloadsClean": payloads_clean,
         }
 
+    def audit(self) -> Dict[str, Any]:
+        """Run the deterministic, read-only operational integrity audit."""
+        from ledger_maintenance import audit_database
+
+        return audit_database(self.database, SCHEMA_VERSION)
+
+    def backup(self, directory: Optional[Path] = None) -> Dict[str, Any]:
+        """Create and verify a concurrent-safe content-addressed backup."""
+        from ledger_maintenance import create_backup
+
+        destination = directory or self.database.parent / "backups"
+        return create_backup(self.database, Path(destination), SCHEMA_VERSION)
+
+    def recovery_health(self, directory: Optional[Path] = None) -> Dict[str, Any]:
+        """Verify all published recovery points for this ledger identity."""
+        from ledger_maintenance import audit_backup_directory
+
+        health = self.audit()
+        if not health.get("databaseId"):
+            return {
+                "status": "unavailable", "healthy": False, "verifiedBackups": 0,
+                "failures": ["Ledger identity is unavailable"],
+            }
+        destination = directory or self.database.parent / "backups"
+        return audit_backup_directory(
+            Path(destination), SCHEMA_VERSION, health["databaseId"]
+        )
+
+    def restore(self, backup: Path, manifest: Path, target: Path,
+                expected_database_id: str) -> Dict[str, Any]:
+        """Recover a verified backup to a new path, never over the live ledger."""
+        from ledger_maintenance import restore_backup
+
+        return restore_backup(
+            backup, manifest, target, SCHEMA_VERSION, expected_database_id,
+            live_database=self.database,
+        )
+
     def latest(self) -> Dict[str, Any]:
         if not self.database.exists():
-            return {"status": "empty", "database": str(self.database), "snapshots": 0}
+            return {
+                "status": "empty", "database": str(self.database), "snapshots": 0,
+                "health": self.audit(),
+            }
+        health = self.audit()
+        if not health.get("healthy"):
+            return {"status": "blocked", "database": str(self.database), "health": health}
         with self.connect(create=False) as connection:
             row = connection.execute(
                 "SELECT snapshot_id FROM universe_snapshots ORDER BY cutoff_utc DESC LIMIT 1"
@@ -628,9 +871,13 @@ class UniverseLedger:
                 outcome_states[state] = outcome_states.get(state, 0) + 1
             counts["outcomeStates"] = outcome_states
         if not row:
-            return {"status": "empty", "database": str(self.database), **counts}
+            return {
+                "status": "empty", "database": str(self.database), **counts,
+                "health": health, "recovery": self.recovery_health(),
+            }
         return {"status": "ready", "database": str(self.database), **counts,
-                "latest": self.reconstruct(row["snapshot_id"])}
+                "latest": self.reconstruct(row["snapshot_id"]), "health": health,
+                "recovery": self.recovery_health()}
 
     def build_protocol(self, snapshot_id: str, expected_symbols: Iterable[str],
                        benchmark: str, one_way_cost_bps: float) -> Dict[str, Any]:
@@ -682,17 +929,36 @@ class UniverseLedger:
             }
         chain = [self.reconstruct(value) for value in related_ids]
         chain_clean = bool(chain) and all(item.get("status") == "verified" for item in chain)
-        lookthrough_by_version: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        lookthrough_by_version: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        chain_has_archived_lookthrough = []
         for frozen in chain:
-            for row in frozen.get("lookthrough") or []:
+            frozen_rows = frozen.get("lookthrough") or []
+            chain_has_archived_lookthrough.append(bool(frozen_rows) and all(
+                bool(row["complete"])
+                and json.loads(row["payload_json"]).get("archiveEvidence") is True
+                and bool(row.get("retrieved_at") and row.get("holdings_report_id")
+                         and row.get("fee_report_id"))
+                for row in frozen_rows
+            ))
+            for row in frozen_rows:
                 payload = json.loads(row["payload_json"])
-                lookthrough_by_version[(row["payload_hash"], row["available_at"])] = {
-                    **payload, "asOf": row["as_of"], "availableAt": row["available_at"][:10],
+                lookthrough_by_version[(row["payload_hash"], row["available_at"],
+                                        row.get("retrieved_at") or "")] = {
+                    **payload, "asOf": row["as_of"], "availableAt": row["available_at"],
+                    "retrievedAt": row.get("retrieved_at"),
+                    "fundSecurityId": row.get("fund_security_id"),
+                    "shareClassId": row.get("share_class_id"),
+                    "holdingsReportId": row.get("holdings_report_id"),
+                    "feeReportId": row.get("fee_report_id"),
+                    "reportingLagDays": row.get("reporting_lag_days"),
+                    "sourceHashes": json.loads(row.get("source_hashes_json") or "[]"),
                     "complete": bool(row["complete"]), "contentHash": row["payload_hash"],
                 }
         lookthrough = sorted(
-            lookthrough_by_version.values(), key=lambda row: (row["availableAt"], row["contentHash"])
+            lookthrough_by_version.values(),
+            key=lambda row: (row["availableAt"], row.get("retrievedAt") or "", row["contentHash"])
         )
+        archived_lookthrough_complete = bool(chain_has_archived_lookthrough) and all(chain_has_archived_lookthrough)
         control_chain = [item["manifest"].get("controls") or {} for item in chain if item.get("manifest")]
         latest_chain_date = max(
             (_date(item.get("decisionDate")) for item in chain), default=rebuilt["decisionDate"]
@@ -713,8 +979,25 @@ class UniverseLedger:
             and record["outcomeComplete"] and record["securityId"]
             for record in universe_records.values()
         )
+        selection_policy_frozen = bool(control_chain) and all(
+            item.get("selectionPolicyFrozen") is True for item in control_chain
+        )
+        point_in_time_prices = bool(control_chain) and all(
+            item.get("pointInTimePrices") is True for item in control_chain
+        )
+        adjustment_policy = (
+            "point_in_time_total_return"
+            if control_chain and all(item.get("adjustmentPolicy") == "point_in_time_total_return"
+                                     for item in control_chain)
+            else "unverified"
+        )
+        certification_complete = bool(
+            all_records and archived_lookthrough_complete and chain_clean
+            and selection_policy_frozen and point_in_time_prices
+            and adjustment_policy == "point_in_time_total_return"
+        )
         return {
-            "status": "ready" if all_records else "accumulating",
+            "status": "ready" if certification_complete else "accumulating",
             "protocolVersion": PROTOCOL_VERSION, "ledgerVerified": chain_clean,
             "snapshotIds": [item["snapshotId"] for item in chain],
             "manifestHashes": [item["manifestHash"] for item in chain],
@@ -722,22 +1005,15 @@ class UniverseLedger:
             "frozenAt": rebuilt["decisionDate"], "universe": expected,
             "universeRecords": universe_records, "benchmark": benchmark,
             "survivorshipFree": all_records,
-            "selectionPolicyFrozen": bool(control_chain) and all(
-                item.get("selectionPolicyFrozen") is True for item in control_chain
-            ),
-            "pointInTimePrices": bool(control_chain) and all(
-                item.get("pointInTimePrices") is True for item in control_chain
-            ),
-            "adjustmentPolicy": (
-                "point_in_time_total_return"
-                if control_chain and all(item.get("adjustmentPolicy") == "point_in_time_total_return"
-                                         for item in control_chain)
-                else "unverified"
-            ),
+            "archivedLookthroughComplete": archived_lookthrough_complete,
+            "selectionPolicyFrozen": selection_policy_frozen,
+            "pointInTimePrices": point_in_time_prices,
+            "adjustmentPolicy": adjustment_policy,
             "oneWayCostBps": one_way_cost_bps,
             "lookthroughSnapshots": lookthrough,
-            "message": ("The frozen universe has complete outcomes."
-                        if all_records else "The frozen universe is valid and is accumulating future outcomes."),
+            "message": ("The frozen universe has complete outcomes and archived ETF evidence."
+                        if certification_complete else
+                        "The frozen universe is accumulating outcomes or archived ETF evidence."),
         }
 
 

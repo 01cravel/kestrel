@@ -36,7 +36,7 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 | Analyst expectations | Named analyst actions and long-lived point-in-time contributor estimates | Estimates are opinions. Preserve analyst, firm, rating and target change, date and track record; require at least three firms and an independent consensus check | FMP/Finnhub anonymous consensus is provisional. Benzinga named-ratings adapter is ready to connect; Morningstar independent fair value is the preferred separate valuation check if affordable |
 | Company guidance and earnings releases | SEC-filed issuer release or a publication on a verified official investor-relations domain | Retain the exact SEC acceptance or IR publication timestamp, metric definition, fiscal period, endpoints, unit, currency and original wording. Compare only an identical metric/definition/period/unit/currency key. Conflicts, missing timestamps and ambiguous units fail closed; no midpoint is inferred | On-demand 8-K/6-K filing-package ingestion and deterministic range comparison are connected at `/api/guidance`. Non-filed IR releases require a verified issuer domain and timezone-bearing publication timestamp |
 | Proven-investor holdings | SEC Form 13F filing and information table | Use disclosed changes and portfolio conviction to discover research candidates; never treat delayed ownership as a Buy signal | Direct latest-versus-prior 13F comparison connected for eight deliberately selected long-equity managers, with CUSIP-to-ticker identity checks |
-| ETF holdings and fees | Issuer holdings/prospectus plus SEC Form N-PORT | Verify look-through exposure, fee, derivatives, cash and reporting lag | Planned |
+| ETF holdings and fees | Issuer holdings/prospectus plus SEC Form N-PORT | Preserve permanent fund and share-class identity, report date, exact publication/availability/retrieval clocks, lag, original units/currency, cash, derivatives, reported total, accession/source record ID, URL and hashes. Never infer weights, normalize an incomplete total, mix currencies or substitute a current portfolio for a past cutoff | Append-only archive and walk-forward gate connected. Current live issuer downloads remain descriptive until their exact source files are archived; historical collection and five untouched annual windows remain outstanding |
 | Rates, inflation and economy | Original agency releases; FRED/ALFRED for observations and vintages | Backtests use only the end-of-day vintage available on the decision date; missing or stale evidence disables the label | Connected for a minimal US evidence set; context only, with no rating impact |
 | Portfolio risk | Reproducible derivation from point-in-time, corporate-action-adjusted total returns | Use shrinkage covariance, factor exposures and stress scenarios; reject unstable weights | Simple concentration and beta only |
 
@@ -65,6 +65,30 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 - No unresolved source conflict, stale critical field, or model warning remains.
 
 Until those sources are connected, Kestrel caps confidence at **Medium** and disables **Ultra Buy**.
+
+## Archived ETF evidence
+
+`etf_evidence.py` is the holdings-and-fee evidence boundary. It accepts only an
+authoritative issuer file/prospectus or SEC Form N-PORT record with a stable
+fund and share-class identity, source record ID or accession, URL, SHA-256
+hashes, and timezone-bearing publication, availability and retrieval times.
+The normalized report retains its as-of date and reporting lag separately.
+
+Every position keeps its source-reported units, unit name, market value,
+currency and weight. Cash stays a position. A derivative keeps its contract
+details; it is never flattened into an assumed equity exposure. A report is
+complete only when the source declares full coverage and a reported total near
+100% (or 1.0 in fractional units), cash, derivatives and currencies are all
+resolved, the requested share class matches, the report was known by the
+decision cutoff, and an archived share-class fee report is linked. This
+tolerance detects a complete source report; Kestrel never rescales its rows.
+
+Identical replay is idempotent. A changed source record must declare an
+amendment or correction and point to the prior immutable record. Database
+triggers reject updates and deletes. The universe protocol retains both report
+IDs, exact clocks, reporting lag, source record IDs, URLs and hashes. A live
+issuer response without that archived chain cannot open the historical
+look-through gate.
 
 ## Point-in-time macro evidence
 

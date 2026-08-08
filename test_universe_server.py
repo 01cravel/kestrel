@@ -10,10 +10,17 @@ import server
 class _Ledger:
     def __init__(self):
         self.arguments = None
+        self.health = {"status": "healthy", "healthy": True, "logicalRoot": "root"}
 
     def capture_snapshot(self, **arguments):
         self.arguments = arguments
         return {"status": "captured", "snapshotId": "test"}
+
+    def audit(self):
+        return self.health
+
+    def backup(self):
+        return {"status": "created", "verified": True, "sha256": "hash"}
 
 
 class _MarketStore:
@@ -95,7 +102,7 @@ class UniverseServerTests(unittest.TestCase):
         self.assertFalse(ledger.arguments["controls"]["pointInTimePrices"])
         self.assertEqual(ledger.arguments["controls"]["adjustmentPolicy"], "unverified")
 
-    def test_certified_archive_opens_point_in_time_price_and_action_controls(self):
+    def test_price_archive_cannot_certify_live_unarchived_etf_holdings(self):
         ledger = _Ledger()
         instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
         certification = {
@@ -111,17 +118,10 @@ class UniverseServerTests(unittest.TestCase):
         ):
             result = server.freeze_daily_universe(instant)
         self.assertEqual(result["status"], "captured")
-        self.assertEqual(
-            ledger.arguments["selection_policy_version"],
-            server.CERTIFIED_UNIVERSE_SELECTION_POLICY,
-        )
-        self.assertEqual(ledger.arguments["members"], certification["members"])
-        self.assertEqual(ledger.arguments["evidence"], certification["evidence"])
-        self.assertTrue(ledger.arguments["controls"]["pointInTimePrices"])
-        self.assertEqual(
-            ledger.arguments["controls"]["adjustmentPolicy"],
-            "point_in_time_total_return",
-        )
+        self.assertEqual(ledger.arguments["selection_policy_version"], server.UNIVERSE_SELECTION_POLICY)
+        self.assertNotEqual(ledger.arguments["members"], certification["members"])
+        self.assertFalse(ledger.arguments["controls"]["pointInTimePrices"])
+        self.assertEqual(ledger.arguments["controls"]["adjustmentPolicy"], "unverified")
 
     def test_broken_optional_archive_still_freezes_a_fail_closed_manifest(self):
         ledger = _Ledger()
@@ -151,29 +151,54 @@ class UniverseServerTests(unittest.TestCase):
     def test_daily_workflow_advances_outcomes_after_freeze(self):
         instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
         outcomes = _Outcomes()
+        ledger = _Ledger()
         with (
             patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
             patch.object(server, "refresh_sec_terminal_events", return_value={"status": "refreshed", "stored": 1}),
             patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
+            patch.object(server, "UNIVERSE_LEDGER", ledger),
         ):
             result = server.update_daily_universe_ledger(instant)
+        self.assertEqual(result["status"], "updated")
         self.assertEqual(result["snapshot"]["status"], "captured")
         self.assertEqual(result["outcomes"]["recorded"], 1)
         self.assertEqual(result["terminalEvidence"]["stored"], 1)
+        self.assertTrue(result["backup"]["verified"])
         self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
 
     def test_terminal_ingestion_failure_does_not_weaken_or_skip_outcome_gates(self):
         instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
         outcomes = _Outcomes()
+        ledger = _Ledger()
         with (
             patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
             patch.object(server, "refresh_sec_terminal_events", side_effect=RuntimeError("SEC unavailable")),
             patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
+            patch.object(server, "UNIVERSE_LEDGER", ledger),
         ):
             result = server.update_daily_universe_ledger(instant)
         self.assertEqual(result["terminalEvidence"]["status"], "failed")
         self.assertEqual(result["outcomes"]["recorded"], 1)
+        self.assertTrue(result["backup"]["verified"])
         self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
+
+    def test_daily_workflow_stops_before_writes_when_integrity_fails(self):
+        ledger = _Ledger()
+        ledger.health = {"status": "corrupt", "healthy": False, "failures": ["hash mismatch"]}
+        with (
+            patch.object(server, "freeze_daily_universe") as freeze,
+            patch.object(server, "refresh_sec_terminal_events") as terminal_evidence,
+            patch.object(server, "UNIVERSE_OUTCOMES") as outcomes,
+            patch.object(server, "UNIVERSE_LEDGER", ledger),
+        ):
+            result = server.update_daily_universe_ledger(
+                dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
+            )
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["stage"], "preflight")
+        freeze.assert_not_called()
+        terminal_evidence.assert_not_called()
+        outcomes.capture.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -237,8 +237,9 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
     if source_dates and lookthrough_available and lookthrough_available <= cutoff:
         lookthrough.append({
             "asOf": min(source_dates), "availableAt": lookthrough_available,
+            "retrievedAt": lookthrough_available,
             "complete": lookthrough_payload.get("complete") is True,
-            "source": "Official ETF issuer holdings",
+            "source": "Live official ETF issuer holdings (descriptive only)",
             "payload": lookthrough_payload,
         })
     try:
@@ -252,7 +253,11 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
         certification = {"status": "unavailable"}
     certified = bool(
         certification.get("status") == "ready" and lookthrough_payload.get("complete") is True
-        and lookthrough
+        and lookthrough and all(
+            row.get("complete") is True
+            and (row.get("payload") or {}).get("archiveEvidence") is True
+            for row in lookthrough
+        )
     )
     members = (
         certification["members"] if certified
@@ -281,13 +286,19 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
 
 
 def update_daily_universe_ledger(now: datetime | None = None) -> Dict[str, Any]:
-    """Freeze today's truth set and advance every retained outcome path."""
+    """Audit, update, re-audit and back up the daily ledger fail closed."""
     instant = now or datetime.now(dt_timezone.utc)
     if instant.tzinfo is None:
         raise ValueError("Universe workflow time must include a timezone")
     recorded = instant.astimezone(dt_timezone.utc).replace(
         microsecond=0
     ).isoformat().replace("+00:00", "Z")
+    before = UNIVERSE_LEDGER.audit()
+    if before.get("status") not in {"empty", "healthy"}:
+        return {
+            "status": "blocked", "stage": "preflight", "health": before,
+            "message": "The universe ledger failed integrity checks; no daily writes were attempted.",
+        }
     snapshot = freeze_daily_universe(instant)
     # This collector can only add fully evidenced rows. A failed refresh is
     # reported separately and never relaxes the existing outcome gates.
@@ -301,8 +312,19 @@ def update_daily_universe_ledger(now: datetime | None = None) -> Dict[str, Any]:
         dt_timezone.utc
     ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     outcomes = UNIVERSE_OUTCOMES.capture(outcome_recorded)
-    return {"status": "updated", "snapshot": snapshot,
-            "terminalEvidence": terminal_evidence, "outcomes": outcomes}
+    after = UNIVERSE_LEDGER.audit()
+    if not after.get("healthy"):
+        return {
+            "status": "blocked", "stage": "verification", "snapshot": snapshot,
+            "terminalEvidence": terminal_evidence, "outcomes": outcomes, "health": after,
+            "message": "Daily writes completed but recovery verification failed; no backup was published.",
+        }
+    backup = UNIVERSE_LEDGER.backup()
+    return {
+        "status": "updated", "snapshot": snapshot,
+        "terminalEvidence": terminal_evidence, "outcomes": outcomes,
+        "health": after, "backup": backup,
+    }
 
 
 def load_cache() -> None:
