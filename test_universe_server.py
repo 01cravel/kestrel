@@ -154,12 +154,30 @@ class UniverseServerTests(unittest.TestCase):
         ledger = _Ledger()
         with (
             patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
+            patch.object(server, "refresh_sec_terminal_events", return_value={"status": "refreshed", "stored": 1}),
             patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
             patch.object(server, "UNIVERSE_LEDGER", ledger),
         ):
             result = server.update_daily_universe_ledger(instant)
         self.assertEqual(result["status"], "updated")
         self.assertEqual(result["snapshot"]["status"], "captured")
+        self.assertEqual(result["outcomes"]["recorded"], 1)
+        self.assertEqual(result["terminalEvidence"]["stored"], 1)
+        self.assertTrue(result["backup"]["verified"])
+        self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
+
+    def test_terminal_ingestion_failure_does_not_weaken_or_skip_outcome_gates(self):
+        instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
+        outcomes = _Outcomes()
+        ledger = _Ledger()
+        with (
+            patch.object(server, "freeze_daily_universe", return_value={"status": "captured"}),
+            patch.object(server, "refresh_sec_terminal_events", side_effect=RuntimeError("SEC unavailable")),
+            patch.object(server, "UNIVERSE_OUTCOMES", outcomes),
+            patch.object(server, "UNIVERSE_LEDGER", ledger),
+        ):
+            result = server.update_daily_universe_ledger(instant)
+        self.assertEqual(result["terminalEvidence"]["status"], "failed")
         self.assertEqual(result["outcomes"]["recorded"], 1)
         self.assertTrue(result["backup"]["verified"])
         self.assertEqual(outcomes.recorded_at, "2026-08-07T21:00:00Z")
@@ -169,6 +187,7 @@ class UniverseServerTests(unittest.TestCase):
         ledger.health = {"status": "corrupt", "healthy": False, "failures": ["hash mismatch"]}
         with (
             patch.object(server, "freeze_daily_universe") as freeze,
+            patch.object(server, "refresh_sec_terminal_events") as terminal_evidence,
             patch.object(server, "UNIVERSE_OUTCOMES") as outcomes,
             patch.object(server, "UNIVERSE_LEDGER", ledger),
         ):
@@ -178,6 +197,7 @@ class UniverseServerTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["stage"], "preflight")
         freeze.assert_not_called()
+        terminal_evidence.assert_not_called()
         outcomes.capture.assert_not_called()
 
 

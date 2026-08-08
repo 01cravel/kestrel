@@ -17,6 +17,7 @@ import math
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from urllib.parse import urlparse
 
 from market_history import DEFAULT_DATABASE as DEFAULT_MARKET_DATABASE
 from swing_radar_policy import POLICY_VERSION
@@ -208,7 +209,7 @@ class UniverseOutcomeCapture:
                 ORDER BY available_at, accession""",
             (*aliases, *sorted(TERMINAL_EVENT_TYPES)),
         ).fetchall()
-        valid: List[Dict[str, Any]] = []
+        candidates: List[Dict[str, Any]] = []
         late = 0
         for row in rows:
             source = str(row["source"] or "")
@@ -226,6 +227,32 @@ class UniverseOutcomeCapture:
             except (TypeError, json.JSONDecodeError):
                 continue
             if not isinstance(detail, dict):
+                continue
+            source_url = str(detail.get("sourceUrl") or "")
+            source_kind = str(detail.get("sourceKind") or "")
+            parsed_source = urlparse(source_url)
+            source_authoritative = (
+                source_kind == "sec_filing"
+                and parsed_source.scheme == "https"
+                and (parsed_source.hostname or "").lower() in {"sec.gov", "www.sec.gov"}
+                and parsed_source.path.startswith("/Archives/edgar/data/")
+            ) or (
+                source_kind == "official_issuer"
+                and parsed_source.scheme == "https"
+                and detail.get("issuerDomainVerified") is True
+            )
+            raw_hashes = detail.get("rawDocumentHashes") or []
+            raw_record_hash = str(detail.get("rawRecordHash") or "")
+            if (detail.get("schemaVersion") != "authoritative-terminal-event-v1"
+                    or not source_authoritative
+                    or not raw_hashes or any(not _is_hash(value) for value in raw_hashes)
+                    or not _is_hash(raw_record_hash)
+                    or detail.get("accession") != row["accession"]
+                    or str(detail.get("targetSecurityId") or "").upper()
+                    != f"CIK:{int(row['cik'])}".upper()
+                    or _utc(detail.get("publishedAt")) != _utc(row["published_at"])
+                    or _utc(detail.get("availableAt")) != available
+                    or _utc(detail.get("retrievedAt")) != retrieved):
                 continue
             consideration = detail.get("consideration") or {}
             kind = str(consideration.get("kind") or "").lower()
@@ -250,9 +277,32 @@ class UniverseOutcomeCapture:
             record = dict(row)
             record.update({"effectiveOn": effective, "consideration": normalized,
                            "available_at": available, "retrieved_at": retrieved,
-                           "recordHash": _hash(dict(row))})
-            valid.append(record)
-        return valid, late
+                           "recordHash": _hash({"rawRecordHash": raw_record_hash,
+                                                "rawDocumentHashes": raw_hashes}),
+                           "supersedesAccession": detail.get("supersedesAccession")})
+            candidates.append(record)
+
+        # An explicit amendment suppresses only the named earlier accession at
+        # cutoffs where the amendment itself was already available. An
+        # unlinked difference remains a conflict and fails the outcome fold.
+        by_accession = {str(row["accession"]): row for row in candidates}
+        superseded = set()
+        invalid_amendment = False
+        for row in candidates:
+            prior = str(row.get("supersedesAccession") or "")
+            if not prior:
+                continue
+            previous = by_accession.get(prior)
+            if (not previous or previous["cik"] != row["cik"]
+                    or previous["available_at"] >= row["available_at"]):
+                invalid_amendment = True
+                continue
+            superseded.add(prior)
+        if invalid_amendment:
+            for row in candidates:
+                row["invalidAmendment"] = True
+            return candidates, late
+        return [row for row in candidates if str(row["accession"]) not in superseded], late
 
     def _append(
         self, member: Dict[str, Any], recorded: str, *, status: str,
@@ -301,6 +351,9 @@ class UniverseOutcomeCapture:
             return self._conflict(member, recorded, decision, frozen_currency,
                                   "Conflicting delisting dates", inactive)
         terminal_events, late_events = self._terminal_evidence(market, aliases, ciks, recorded)
+        if any(row.get("invalidAmendment") for row in terminal_events):
+            return self._conflict(member, recorded, decision, frozen_currency,
+                                  "Invalid or unattributable authoritative amendment", terminal_events)
         event_terms = {(row["effectiveOn"], _canonical(row["consideration"])) for row in terminal_events}
         if len(event_terms) > 1:
             return self._conflict(member, recorded, decision, frozen_currency,

@@ -393,7 +393,7 @@ def store_events(symbol: str, database: Optional[Any] = None,
         return {"status": "failed", "symbol": ticker, "stored": 0, "reason": str(error)}
     try:
         connection.executemany(
-            "INSERT OR REPLACE INTO issuer_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
+            "INSERT OR IGNORE INTO issuer_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
         )
         connection.commit()
     except sqlite3.DatabaseError as error:

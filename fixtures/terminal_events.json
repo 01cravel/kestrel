@@ -1,0 +1,10 @@
+{
+  "cash": "Issuer SEC CIK: 1. The merger completed on June 2, 2025. Each share was converted into the right to receive 150 USD in cash per share.",
+  "stock": "Issuer SEC CIK: 1. The merger became effective on June 2, 2025. Each share was converted into 0.5 shares for each share. Successor security identity: FIGI:NEW.",
+  "mixed": "Issuer SEC CIK: 1. The merger closed on June 2, 2025. Holders receive 20 USD in cash per share and 0.25 shares for each share. Successor security identity: FIGI:NEW.",
+  "delisting_cash": "Issuer SEC CIK: 1. The delisting became effective on June 2, 2025. Each share was cancelled for 150 USD per share.",
+  "amended": "Issuer SEC CIK: 1. This filing supersedes accession 0000000001-25-000001. The merger completed on June 2, 2025. Each share was converted into the right to receive 155 USD in cash per share.",
+  "missing_currency": "Issuer SEC CIK: 1. The merger completed on June 2, 2025. Each share was converted into the right to receive $150 in cash per share.",
+  "conflicting": "Issuer SEC CIK: 1. The merger completed on June 2, 2025. Holders receive 150 USD per share and 155 USD per share.",
+  "identity_mismatch": "Issuer SEC CIK: 2. The merger completed on June 2, 2025. Each share was converted into the right to receive 150 USD in cash per share."
+}

@@ -69,6 +69,16 @@ requires the expected ledger identity and a new empty target; it cannot replace 
 live ledger. Hash, identity, schema, WAL-state or recovery-root disagreement blocks
 restore. See [LEDGER_OPERATIONS.md](LEDGER_OPERATIONS.md) for the operator procedure.
 
+The daily terminal-event collector reads filing-package text, never the meaning
+of an 8-K item number. Every accepted contract binds the target CIK, accession,
+source URL, effective date, exact consideration, SEC acceptance or verified IR
+publication time, first availability, retrieval time, raw document hashes and
+raw record hash. A filing amendment affects only later recorded-time folds and
+must explicitly identify its superseded accession. Missing identities, bare
+currency symbols, contradictory terms, late evidence and unrelated corrections
+remain rejected or conflicting. SQLite triggers forbid issuer-event updates and
+deletes as well as outcome-history rewrites.
+
 ## Chronological test
 
 - Train on at least 36 months available before the decision cutoff.

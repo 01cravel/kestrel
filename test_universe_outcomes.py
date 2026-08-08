@@ -83,12 +83,23 @@ class UniverseOutcomeCaptureTests(unittest.TestCase):
             connection.commit()
 
     def _event(self, event_type, effective, consideration, accession="accession-1",
-               available="2025-06-02T18:00:00Z", retrieved="2025-06-02T19:00:00Z"):
+               available="2025-06-02T18:00:00Z", retrieved="2025-06-02T19:00:00Z",
+               supersedes=None):
+        detail = {
+            "schemaVersion": "authoritative-terminal-event-v1",
+            "effectiveOn": effective, "consideration": consideration,
+            "sourceKind": "sec_filing", "targetSecurityId": "CIK:1",
+            "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1/filing/",
+            "accession": accession, "publishedAt": available,
+            "availableAt": available, "retrievedAt": retrieved,
+            "rawDocumentHashes": [HASH], "rawRecordHash": HASH,
+            "supersedesAccession": supersedes,
+        }
         with self.market.connect() as connection:
             connection.execute(
                 "INSERT INTO issuer_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 ("AAA", "1", event_type, effective, available, available, None,
-                 json.dumps({"effectiveOn": effective, "consideration": consideration}),
+                 json.dumps(detail),
                  accession, "SEC EDGAR 8-K", retrieved),
             )
             connection.commit()
@@ -201,6 +212,25 @@ class UniverseOutcomeCaptureTests(unittest.TestCase):
                     accession="accession-2")
         result = self.capture_service.capture("2025-06-03T22:00:00Z")
         self.assertEqual(result["results"][0]["outcomeStatus"], "conflict")
+
+    def test_explicit_amendment_replaces_terms_only_after_its_availability(self):
+        self._reference("2025-01-02", "AAA")
+        self._reference("2025-06-02", "AAA", active=False, delisted="2025-06-02")
+        for date in ("2025-01-03", "2025-06-02"):
+            self._session(date)
+            self._observation(date)
+        self._event("merger_cash", "2025-06-02",
+                    {"kind": "cash", "cashPerShare": 150, "currency": "USD"})
+        before = self.capture_service.capture("2025-06-02T22:00:00Z")
+        self.assertEqual(before["results"][0]["outcomeStatus"], "delisted_complete")
+        self._event("merger_cash", "2025-06-02",
+                    {"kind": "cash", "cashPerShare": 155, "currency": "USD"},
+                    accession="accession-2", available="2025-06-03T18:00:00Z",
+                    retrieved="2025-06-03T19:00:00Z", supersedes="accession-1")
+        after = self.capture_service.capture("2025-06-03T22:00:00Z")
+        self.assertEqual(after["results"][0]["outcomeStatus"], "delisted_complete")
+        self.assertEqual(self._outcomes()[-1]["proceeds"], 155)
+        self.assertEqual([row["proceeds"] for row in self._outcomes()], [150, 155])
 
     def test_late_terminal_evidence_cannot_enter_earlier_state(self):
         self._reference("2025-01-02", "AAA")
