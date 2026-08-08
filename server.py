@@ -285,16 +285,33 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
 
 
 def update_daily_universe_ledger(now: datetime | None = None) -> Dict[str, Any]:
-    """Freeze today's truth set and advance every retained outcome path."""
+    """Audit, update, re-audit and back up the daily ledger fail closed."""
     instant = now or datetime.now(dt_timezone.utc)
     if instant.tzinfo is None:
         raise ValueError("Universe workflow time must include a timezone")
     recorded = instant.astimezone(dt_timezone.utc).replace(
         microsecond=0
     ).isoformat().replace("+00:00", "Z")
+    before = UNIVERSE_LEDGER.audit()
+    if before.get("status") not in {"empty", "healthy"}:
+        return {
+            "status": "blocked", "stage": "preflight", "health": before,
+            "message": "The universe ledger failed integrity checks; no daily writes were attempted.",
+        }
     snapshot = freeze_daily_universe(instant)
     outcomes = UNIVERSE_OUTCOMES.capture(recorded)
-    return {"status": "updated", "snapshot": snapshot, "outcomes": outcomes}
+    after = UNIVERSE_LEDGER.audit()
+    if not after.get("healthy"):
+        return {
+            "status": "blocked", "stage": "verification", "snapshot": snapshot,
+            "outcomes": outcomes, "health": after,
+            "message": "Daily writes completed but recovery verification failed; no backup was published.",
+        }
+    backup = UNIVERSE_LEDGER.backup()
+    return {
+        "status": "updated", "snapshot": snapshot, "outcomes": outcomes,
+        "health": after, "backup": backup,
+    }
 
 
 def load_cache() -> None:
