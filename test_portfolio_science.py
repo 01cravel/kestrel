@@ -10,6 +10,7 @@ from portfolio_science import (
     MODEL_VERSION, analyze_portfolio_science, portfolio_science_snapshot, walk_forward_evaluation,
 )
 from price_history import _downsample
+from universe_ledger import PROTOCOL_VERSION as UNIVERSE_PROTOCOL_VERSION
 
 
 def histories(months: int = 150, point_in_time: bool = False):
@@ -61,11 +62,16 @@ def persistent_edge_histories(months: int = 150):
 class PortfolioScienceTests(unittest.TestCase):
     def protocol(self):
         return {
+            "protocolVersion": UNIVERSE_PROTOCOL_VERSION,
+            "ledgerVerified": True,
+            "snapshotIds": ["a" * 64],
+            "manifestHashes": ["b" * 64],
             "modelVersion": MODEL_VERSION,
             "frozenAt": "2013-12-01",
             "universe": sorted([*SYMBOLS, BENCHMARK_SYMBOL]),
             "universeRecords": {
-                symbol: {"includedAtFreeze": True, "outcomeComplete": True}
+                symbol: {"securityId": f"FIGI:{symbol}", "membershipVerified": True,
+                         "includedAtFreeze": True, "outcomeComplete": True}
                 for symbol in [*SYMBOLS, BENCHMARK_SYMBOL]
             },
             "benchmark": BENCHMARK_SYMBOL,

@@ -106,6 +106,68 @@ class MarketHistoryTests(unittest.TestCase):
             kinds = [row[0] for row in connection.execute("SELECT action_kind FROM corporate_actions ORDER BY action_kind")]
         self.assertEqual(kinds, ["dividend", "split"])
 
+    def _certifiable_session(self):
+        day = "2026-08-07"
+        fetched = "2026-08-07T20:05:00Z"
+        digest = "a" * 64
+        with self.store.connect() as connection:
+            connection.execute(
+                "INSERT INTO sessions VALUES (?, 'complete', 1, 1, 'bars', ?, ?)",
+                (day, fetched, digest),
+            )
+            connection.execute(
+                """INSERT INTO daily_bars VALUES
+                   (?, 'AAA', 99, 101, 98, 100, 1000000, 100, 1000, 1, 1,
+                    'Massive Stocks REST API', 'bars', ?, ?)""",
+                (day, fetched, digest),
+            )
+            connection.execute(
+                """INSERT INTO reference_snapshots VALUES
+                   (?, 'AAA', 1, 'Acme', 'stocks', 'us', 'USD', 'XNAS', 'CS',
+                    '0000000001', 'COMP-AAA', 'SHARE-AAA', NULL, ?, 1, 'refs', ?, ?)""",
+                (day, fetched, fetched, digest),
+            )
+            for endpoint, field, request in (
+                ("/stocks/v1/splits", "execution_date", "splits"),
+                ("/stocks/v1/dividends", "ex_dividend_date", "dividends"),
+            ):
+                parameters = json.dumps({field + ".gte": day, field + ".lte": day})
+                connection.execute(
+                    """INSERT INTO fetch_audit
+                       (endpoint, parameters_json, fetched_at, http_status, request_id,
+                        sha256, raw_path, row_count) VALUES (?, ?, ?, 200, ?, ?, ?, 0)""",
+                    (endpoint, parameters, fetched, request, request[0] * 64, request + ".json.gz"),
+                )
+            connection.executemany(
+                "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
+                [("actions_start", day), ("actions_end", day),
+                 ("actions_retrieved_at", fetched)],
+            )
+            connection.commit()
+        return day
+
+    def test_session_certification_requires_prices_identities_and_raw_action_proofs(self):
+        day = self._certifiable_session()
+        result = self.store.certify_session(day, ["AAA"], "2026-08-07T20:15:00Z")
+        self.assertEqual(result["status"], "ready")
+        self.assertTrue(result["pointInTimePrices"])
+        self.assertEqual(result["adjustmentPolicy"], "point_in_time_total_return")
+        self.assertEqual(result["members"][0]["securityId"], "FIGI:SHARE-AAA")
+        self.assertEqual(result["evidence"][0]["category"], "archived_adjusted_close")
+        action = result["evidence"][-1]
+        self.assertEqual(action["category"], "corporate_action_coverage")
+        self.assertEqual(len(action["payload"]["sourceRequests"]), 2)
+
+    def test_session_certification_fails_closed_for_late_or_missing_coverage(self):
+        day = self._certifiable_session()
+        late = self.store.certify_session(day, ["AAA"], "2026-08-07T20:04:59Z")
+        missing = self.store.certify_session(day, ["AAA", "MISSING"], "2026-08-07T20:15:00Z")
+        self.assertEqual(late["status"], "blocked")
+        self.assertTrue(any("after the decision cutoff" in item or "late" in item
+                            for item in late["failures"]))
+        self.assertEqual(missing["status"], "blocked")
+        self.assertTrue(any("MISSING" in item for item in missing["failures"]))
+
     def test_validation_fails_closed_for_missing_dates_and_bad_prices(self):
         response = {"request_id": "bad", "results": [{"T": "BAD", "h": 5, "l": 10, "c": -1, "v": -2}]}
         pipeline = MarketHistoryPipeline(FakeClient([response]), self.store)

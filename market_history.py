@@ -352,6 +352,156 @@ class MarketHistoryStore:
                     result[field] = json.loads(result[field]) if result.get(field) else None
                 yield result
 
+    def certify_session(self, session_date: str, symbols: Sequence[str],
+                        cutoff_utc: str) -> Dict[str, Any]:
+        """Build a fail-closed bridge from the archive to a universe snapshot.
+
+        Certification requires one archived adjusted close and a point-in-time
+        listing reference for every declared symbol.  The grouped-daily,
+        reference and corporate-action requests must all have been retrieved by
+        the exact decision cutoff.  Missing coverage returns no partial rows.
+        """
+        try:
+            day = dt.date.fromisoformat(str(session_date)).isoformat()
+            cutoff_time = dt.datetime.fromisoformat(str(cutoff_utc).replace("Z", "+00:00"))
+            if cutoff_time.tzinfo is None:
+                raise ValueError
+            cutoff = cutoff_time.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        except (TypeError, ValueError):
+            raise ValueError("Certification date and cutoff must be valid ISO values")
+        expected = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
+        if not expected:
+            raise ValueError("At least one certification symbol is required")
+        base = {"sessionDate": day, "cutoffUtc": cutoff, "symbols": expected,
+                "members": [], "evidence": [], "pointInTimePrices": False,
+                "adjustmentPolicy": "unverified"}
+        if not self.database.exists():
+            return {**base, "status": "unavailable", "reason": "The market-history archive does not exist."}
+        with self.connect(create=False) as connection:
+            session = connection.execute(
+                "SELECT * FROM sessions WHERE session_date=?", (day,)
+            ).fetchone()
+            metadata = {row[0]: row[1] for row in connection.execute(
+                """SELECT key, value FROM metadata WHERE key IN
+                   ('actions_start', 'actions_end', 'actions_retrieved_at')"""
+            )}
+            action_proofs = []
+            for audit in connection.execute(
+                """SELECT endpoint, parameters_json, fetched_at, sha256, request_id
+                   FROM fetch_audit WHERE endpoint IN ('/stocks/v1/splits', '/stocks/v1/dividends')
+                   ORDER BY fetched_at"""
+            ):
+                try:
+                    parameters = json.loads(audit["parameters_json"])
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                field = "execution_date" if audit["endpoint"].endswith("splits") else "ex_dividend_date"
+                if (parameters.get(field + ".gte", "9999-12-31") <= day
+                        and parameters.get(field + ".lte", "0001-01-01") >= day
+                        and audit["fetched_at"] <= cutoff
+                        and len(str(audit["sha256"] or "")) == 64):
+                    action_proofs.append({
+                        "endpoint": audit["endpoint"], "requestId": audit["request_id"],
+                        "retrievedAt": audit["fetched_at"], "contentHash": audit["sha256"],
+                        "parameters": parameters,
+                    })
+            failures = []
+            if not session or session["status"] != "complete" or not session["adjusted"]:
+                failures.append("The adjusted grouped-daily session is missing or incomplete")
+            elif str(session["fetched_at"]) > cutoff:
+                failures.append("The grouped-daily session was retrieved after the decision cutoff")
+            actions_ready = bool(
+                metadata.get("actions_start", "9999-12-31") <= day
+                and metadata.get("actions_end", "0001-01-01") >= day
+                and metadata.get("actions_retrieved_at")
+                and metadata["actions_retrieved_at"] <= cutoff
+                and {row["endpoint"] for row in action_proofs}
+                == {"/stocks/v1/splits", "/stocks/v1/dividends"}
+            )
+            if not actions_ready:
+                failures.append("Corporate-action coverage was missing, late or did not span the session")
+
+            members = []
+            evidence = []
+            for symbol in expected:
+                bar = connection.execute(
+                    "SELECT * FROM daily_bars WHERE session_date=? AND ticker=?", (day, symbol)
+                ).fetchone()
+                reference = connection.execute(
+                    """SELECT * FROM reference_snapshots WHERE ticker=? AND snapshot_date<=?
+                       ORDER BY snapshot_date DESC, active DESC LIMIT 1""", (symbol, day)
+                ).fetchone()
+                close = _number(bar["close"]) if bar else None
+                if (not bar or not bar["adjusted"] or close is None or close <= 0
+                        or str(bar["source_fetched_at"]) > cutoff
+                        or len(str(bar["raw_sha256"] or "")) != 64):
+                    failures.append(f"{symbol} lacks a timely archived adjusted close")
+                    continue
+                if (not reference or str(reference["source_fetched_at"]) > cutoff
+                        or len(str(reference["raw_sha256"] or "")) != 64):
+                    failures.append(f"{symbol} lacks a timely point-in-time listing reference")
+                    continue
+                security_id = (
+                    f"FIGI:{reference['share_class_figi']}" if reference["share_class_figi"] else
+                    f"FIGI:{reference['composite_figi']}" if reference["composite_figi"] else
+                    f"CIK:{reference['cik']}" if reference["cik"] else None
+                )
+                if not security_id:
+                    failures.append(f"{symbol} lacks a stable identifier in the listing archive")
+                    continue
+                identity_available = str(reference["source_fetched_at"])
+                members.append({
+                    "ticker": symbol, "securityId": security_id,
+                    "active": bool(reference["active"]), "identityStatus": "verified",
+                    "identityAvailableAt": identity_available,
+                    "membershipVerified": True, "included": bool(reference["active"]),
+                    "identifiers": {"cik": reference["cik"],
+                                    "compositeFigi": reference["composite_figi"],
+                                    "shareClassFigi": reference["share_class_figi"]},
+                    "listing": {"market": reference["market"], "locale": reference["locale"],
+                                "currency": reference["currency"],
+                                "exchangeMic": reference["primary_exchange"],
+                                "securityType": reference["security_type"],
+                                "snapshotDate": reference["snapshot_date"],
+                                "delistedAt": reference["delisted_utc"]},
+                    "sources": [{"name": SOURCE_NAME + " point-in-time ticker reference",
+                                 "tier": 3, "requestId": reference["source_request_id"],
+                                 "retrievedAt": identity_available,
+                                 "contentHash": reference["raw_sha256"]}],
+                })
+                payload = {key: bar[key] for key in (
+                    "session_date", "ticker", "open", "high", "low", "close", "volume",
+                    "volume_weighted", "trades", "adjusted", "source", "source_request_id",
+                    "source_fetched_at", "raw_sha256",
+                )}
+                evidence.append({
+                    "securityId": security_id, "category": "archived_adjusted_close",
+                    "recordKey": f"{symbol}:{day}",
+                    "availableAt": bar["source_fetched_at"],
+                    "retrievedAt": bar["source_fetched_at"], "source": SOURCE_NAME,
+                    "sourceTier": 3, "payload": payload,
+                })
+            if failures:
+                return {**base, "status": "blocked", "failures": sorted(set(failures))}
+            evidence.append({
+                "securityId": None, "category": "corporate_action_coverage",
+                "recordKey": day, "availableAt": metadata["actions_retrieved_at"],
+                "retrievedAt": metadata["actions_retrieved_at"], "source": SOURCE_NAME,
+                "sourceTier": 3, "payload": {
+                    "coverageStart": metadata["actions_start"],
+                    "coverageEnd": metadata["actions_end"],
+                    "retrievedAt": metadata["actions_retrieved_at"],
+                    "sourceRequests": action_proofs,
+                },
+            })
+        return {
+            **base, "status": "ready", "members": members, "evidence": evidence,
+            "pointInTimePrices": True,
+            "adjustmentPolicy": "point_in_time_total_return",
+            "source": SOURCE_NAME,
+            "message": f"{len(members)} symbols have cutoff-safe adjusted closes, identities and action coverage.",
+        }
+
 
 class MarketHistoryPipeline:
     def __init__(self, client: MassiveClient, store: MarketHistoryStore) -> None:

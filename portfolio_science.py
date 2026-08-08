@@ -22,6 +22,7 @@ from price_history import historical_prices
 from fund_lookthrough import fund_lookthrough_snapshot
 from point_in_time_valuation import point_in_time_valuation_snapshot
 from conservative_dcf import build_dcf_snapshot, official_treasury_10y
+from universe_ledger import PROTOCOL_VERSION as UNIVERSE_PROTOCOL_VERSION
 
 
 MODEL_VERSION = "portfolio-science-v7"
@@ -114,6 +115,15 @@ def _protocol_failures(histories: Dict[str, Dict[str, Any]],
     if not protocol:
         return ["No pre-registered point-in-time test protocol was supplied"]
     failures = []
+    if protocol.get("protocolVersion") != UNIVERSE_PROTOCOL_VERSION:
+        failures.append("The protocol was not produced by the bitemporal universe ledger")
+    if protocol.get("ledgerVerified") is not True:
+        failures.append("The immutable universe snapshot did not pass its hash verification")
+    snapshot_ids = protocol.get("snapshotIds") or []
+    manifest_hashes = protocol.get("manifestHashes") or []
+    if (not snapshot_ids or len(snapshot_ids) != len(manifest_hashes)
+            or any(len(str(value)) != 64 for value in [*snapshot_ids, *manifest_hashes])):
+        failures.append("The protocol lacks immutable snapshot and manifest hashes")
     expected_universe = sorted([*SYMBOLS, BENCHMARK_SYMBOL])
     if protocol.get("modelVersion") != MODEL_VERSION:
         failures.append("The protocol is not bound to this exact model version")
@@ -126,7 +136,8 @@ def _protocol_failures(histories: Dict[str, Dict[str, Any]],
     universe_records = protocol.get("universeRecords") or {}
     for symbol in expected_universe:
         record = universe_records.get(symbol) or {}
-        if record.get("includedAtFreeze") is not True or record.get("outcomeComplete") is not True:
+        if (not record.get("securityId") or record.get("membershipVerified") is not True
+                or record.get("includedAtFreeze") is not True or record.get("outcomeComplete") is not True):
             failures.append(f"{symbol} lacks a frozen membership record or complete outcome path")
     if protocol.get("selectionPolicyFrozen") is not True or not protocol.get("frozenAt"):
         failures.append("The selection policy was not frozen before testing")

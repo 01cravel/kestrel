@@ -13,10 +13,21 @@ record for inactive and delisted instruments. Every price observation needs its
 own availability date and point-in-time total-return adjustment policy. Each
 fold also needs a complete ETF holdings snapshot that was available at its
 cutoff; today's look-through is never substituted into the past.
+The no-cost market archive may open those controls only when every declared
+portfolio symbol has a timely adjusted close, a stable point-in-time identity,
+and retained raw split and dividend request proofs spanning the decision date.
+Missing or late evidence produces no partial certified snapshot.
 
 Current-ticker downloads do not meet this standard. They remain useful for
 descriptive research, but Kestrel reports zero eligible unseen windows until a
 pre-registered, reconstructable information set exists.
+
+`universe_ledger.py` is the certification boundary. Every eligible protocol
+must name a content-addressed snapshot and manifest that the ledger can rebuild
+and verify. The snapshot is write-once: included and excluded members, stable
+identities, evidence cutoffs and ETF holdings cannot be updated or deleted.
+Later outcomes append separately, and a delisted instrument is incomplete until
+its proceeds and currency have independent source evidence.
 
 ## Chronological test
 
