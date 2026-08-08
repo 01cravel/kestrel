@@ -63,6 +63,7 @@ const UPSIDE_SCENARIOS = [
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const compactMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
 const number = value => {
+  if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
@@ -284,13 +285,17 @@ function renderDcf(dcf = {}) {
   const companies = dcf.companies || {};
   const rows = COMPANIES.map(company => {
     const record = companies[company.symbol] || {};
-    const scenarios = Object.fromEntries((record.scenarios || []).map(item => [item.id, item]));
+    const reported = record.reportedView || {};
+    const ownerCash = record.ownerCashView || {};
+    const investment = record.investmentModel || {};
+    const evidence = investment.evidence || {};
+    const scenarios = Object.fromEntries((ownerCash.scenarios || []).map(item => [item.id, item]));
     const row = document.createElement('div');
     row.className = `dcf-table-row ${record.ready ? 'is-ready' : 'is-limited'}`;
     row.setAttribute('role', 'row');
 
     const companyCell = document.createElement('div');
-    companyCell.innerHTML = `<b>${company.symbol}</b><small>${record.ready ? `${record.annualCashFlowPoints} annual points` : record.message || 'Evidence incomplete'}</small>`;
+    companyCell.innerHTML = `<b>${company.symbol}</b><small>${record.normalizedReady ? 'Owner-cash range passed' : record.reportedReady ? 'Reported range only' : record.message || 'Evidence incomplete'}</small>`;
     const priceCell = document.createElement('strong');
     priceCell.textContent = number(record.currentPrice) !== null ? `$${number(record.currentPrice).toFixed(2)}` : '—';
 
@@ -307,18 +312,42 @@ function renderDcf(dcf = {}) {
       return cell;
     };
 
-    const driverCell = document.createElement('div');
-    const base = scenarios.base;
-    driverCell.className = 'dcf-driver';
-    driverCell.textContent = base
-      ? `${base.growthPct.toFixed(1)}% growth · ${base.discountPct.toFixed(1)}% discount · ${base.terminalSharePct.toFixed(0)}% terminal`
-      : record.status === 'unavailable' ? 'No positive cash flow' : 'History or market evidence too short';
-    row.append(companyCell, priceCell, scenarioCell('downside'), scenarioCell('base'), scenarioCell('strong'), driverCell);
+    const reportedCell = document.createElement('div');
+    if (number(reported.rangeLow) !== null && number(reported.rangeHigh) !== null) {
+      reportedCell.innerHTML = `<strong>$${Number(reported.rangeLow).toFixed(2)}–$${Number(reported.rangeHigh).toFixed(2)}</strong><small>All productive spending deducted</small>`;
+    } else {
+      reportedCell.innerHTML = '<strong>—</strong><small>Reported cash not positive or history too short</small>';
+    }
+
+    const splitCell = document.createElement('div');
+    splitCell.className = 'dcf-driver';
+    const maintenance = investment.maintenanceRange || [];
+    const growth = investment.growthRange || [];
+    splitCell.textContent = investment.ready && maintenance.length === 2 && growth.length === 2
+      ? `${compactMoney.format(maintenance[0])}–${compactMoney.format(maintenance[1])} maintain · ${compactMoney.format(growth[0])}–${compactMoney.format(growth[1])} growth`
+      : investment.message || 'No defensible split';
+
+    const evidenceCell = document.createElement('div');
+    evidenceCell.className = 'dcf-evidence';
+    if (evidence.sourceUrl) {
+      const link = document.createElement('a');
+      link.href = evidence.sourceUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = evidence.quality === 'moderate' ? 'Moderate · issuer filing' : 'Insufficient · issuer filing';
+      const detail = document.createElement('small');
+      detail.textContent = evidence.finding || investment.message;
+      evidenceCell.append(link, detail);
+    } else {
+      evidenceCell.innerHTML = `<strong>Missing</strong><small>${investment.message || 'No dated issuer evidence'}</small>`;
+    }
+    row.append(companyCell, priceCell, reportedCell, scenarioCell('downside'), scenarioCell('base'), scenarioCell('strong'), splitCell, evidenceCell);
     return row;
   });
   document.getElementById('dcfRows').replaceChildren(...rows);
-  const ready = Number(dcf.companiesReady || 0);
-  setStatus(document.getElementById('dcfStatus'), `${ready}/8 defensible ranges`, dcf.complete ? 'ready' : 'limited');
+  const normalized = Number(dcf.normalizedCompaniesReady || 0);
+  const reported = Number(dcf.reportedCompaniesReady || 0);
+  setStatus(document.getElementById('dcfStatus'), `${normalized}/8 owner-cash · ${reported}/8 reported`, dcf.complete ? 'ready' : 'limited');
   const riskFree = dcf.riskFreeEvidence || {};
   const riskFreeText = number(riskFree.valuePct) !== null
     ? ` Risk-free anchor: ${Number(riskFree.valuePct).toFixed(2)}%${riskFree.date ? ` on ${riskFree.date}` : ' conservative floor'}.`
