@@ -473,6 +473,60 @@ function renderScienceGates(payload) {
   document.getElementById('scienceGateList').replaceChildren(...rows);
 }
 
+function renderWalkForward(payload) {
+  const result = payload.walkForward || {};
+  const metrics = result.metrics?.challenger || {};
+  const eligible = result.eligible === true;
+  const blocked = result.status === 'blocked';
+  setStatus(
+    document.getElementById('walkForwardStatus'),
+    eligible ? 'Evidence passed' : blocked ? 'Integrity gate closed' : 'Evidence too weak',
+    eligible ? 'ready' : 'limited'
+  );
+  document.getElementById('walkForwardWindows').textContent = `${result.windowCount || 0} / ${result.minimumWindows || 5}`;
+  document.getElementById('walkForwardReturn').textContent = sciencePercent(metrics.annualReturn);
+  document.getElementById('walkForwardDrawdown').textContent = sciencePercent(metrics.maxDrawdown);
+  document.getElementById('walkForwardRisk').textContent = number(metrics.informationRatioVsBenchmark) === null
+    ? '—'
+    : Number(metrics.informationRatioVsBenchmark).toFixed(2);
+  const failures = result.failures || [];
+  document.getElementById('walkForwardSummary').textContent = eligible
+    ? `The challenger beat Candidate 1 in ${result.candidateWins} windows and VT in ${result.benchmarkWins}, after declared costs.`
+    : failures[0] || 'The challenger has not earned promotion on genuinely unseen evidence.';
+
+  const rows = (result.windows || []).map(window => {
+    const passed = Number(window.versusCandidate) > 0 && Number(window.versusBenchmark) > 0;
+    const row = document.createElement('article');
+    row.className = `walkforward-window ${passed ? 'is-passed' : 'is-blocked'}`;
+    const period = document.createElement('div');
+    const dates = document.createElement('span');
+    dates.textContent = `${window.from} → ${window.through}`;
+    const trained = document.createElement('small');
+    trained.textContent = `trained through ${window.trainedThrough}`;
+    period.append(dates, trained);
+    const outcome = document.createElement('strong');
+    outcome.textContent = sciencePercent(window.challengerNetReturn);
+    const comparisons = document.createElement('p');
+    comparisons.textContent = `${sciencePercent(window.versusCandidate)} vs Candidate 1 · ${sciencePercent(window.versusBenchmark)} vs VT`;
+    const marker = document.createElement('b');
+    marker.textContent = passed ? 'Won both' : 'Did not win both';
+    row.append(period, outcome, comparisons, marker);
+    return row;
+  });
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'walkforward-empty';
+    empty.textContent = 'No historical window is allowed to count until its universe and inputs can be reconstructed as they were known then.';
+    rows.push(empty);
+  }
+  document.getElementById('walkForwardWindowList').replaceChildren(...rows);
+  const candidate = result.uncertainty?.versusCandidate || {};
+  const benchmark = result.uncertainty?.versusBenchmark || {};
+  document.getElementById('walkForwardUncertainty').textContent = candidate.low === null || candidate.low === undefined
+    ? 'A 95% uncertainty range needs at least five independent annual windows. Until then, the promotion gate stays closed.'
+    : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 1; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
+}
+
 function renderLookthrough(payload) {
   const lookthrough = payload.lookthrough || {};
   const complete = lookthrough.complete === true;
@@ -526,6 +580,7 @@ function renderPortfolioScience(payload) {
   document.getElementById('scienceDecisionNote').textContent = payload.message || 'No allocation changes while evidence is incomplete';
   renderScienceComparison(payload);
   renderScienceChanges(payload);
+  renderWalkForward(payload);
   renderScienceGates(payload);
   renderLookthrough(payload);
   renderValuations(payload.fundamentals);
@@ -541,6 +596,7 @@ async function loadPortfolioScience() {
     setStatus(document.getElementById('scienceStatus'), 'Audit unavailable · no changes', 'limited');
     document.getElementById('scienceDecision').textContent = 'Keep Candidate 1';
     document.getElementById('scienceDecisionNote').textContent = 'Kestrel could not complete the evidence checks, so it made no allocation changes.';
+    renderWalkForward({});
     renderLookthrough({});
     renderValuations({});
     renderDcf({});

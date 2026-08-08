@@ -12,7 +12,8 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 
 ## Delivery status
 
-- 🚧 **Next priority: run the scientific challenger through unseen walk-forward periods.**
+- ✅ The scientific challenger now has a pre-registered, expanding walk-forward evaluator: 36 months minimum training, non-overlapping 12-month tests, `VT` after declared costs, return, drawdown, information ratio and whole-window uncertainty. Five independent windows and strong evidence against both Candidate 1 and `VT` are mandatory.
+- 🚧 **Next priority: accumulate five genuinely unseen annual windows from the frozen point-in-time universe.** Current-ticker history is rejected because it cannot prove what was known or investable at each past cutoff; the promotion gate therefore remains closed rather than presenting a selection- or survivorship-biased backtest.
 - ✅ Selection-agnostic $300,000 Ultimate Portfolio for an 8/10 risk mandate, with explicit weights, explanations, stress cases and an editable capital base.
 - ✅ Scientific challenger with conservative return shrinkage, covariance shrinkage, 20,000 constrained alternatives, bootstrap ranges and fail-closed promotion gates.
 - ✅ Official ETF look-through for VTI, AVUV, VEA, IEMG, AVDV and PAVE. Direct and hidden company exposure is combined, source freshness and reconciliation are checked, and the challenger enforces an 8% true-company ceiling.

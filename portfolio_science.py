@@ -15,6 +15,7 @@ import random
 import statistics
 import threading
 import time
+from datetime import date, timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from price_history import historical_prices
@@ -23,7 +24,7 @@ from point_in_time_valuation import point_in_time_valuation_snapshot
 from conservative_dcf import build_dcf_snapshot, official_treasury_10y
 
 
-MODEL_VERSION = "portfolio-science-v6"
+MODEL_VERSION = "portfolio-science-v7"
 DEFAULT_ITERATIONS = 20_000
 RANDOM_SEED = 20260808
 CACHE_SECONDS = 12 * 60 * 60
@@ -55,6 +56,10 @@ FOUNDATION = [symbol for symbol, group in GROUPS.items() if group == "foundation
 COMPANIES = [symbol for symbol, group in GROUPS.items() if group == "companies"]
 SYMBOLS = list(CANDIDATE_WEIGHTS)
 BENCHMARK_SYMBOL = "VT"
+WALK_FORWARD_TRAIN_MONTHS = 36
+WALK_FORWARD_TEST_MONTHS = 12
+WALK_FORWARD_MIN_WINDOWS = 5
+WALK_FORWARD_BOOTSTRAPS = 2_000
 
 _LOCK = threading.Lock()
 _CACHE: Optional[Dict[str, Any]] = None
@@ -85,6 +90,276 @@ def _month_returns(history: Dict[str, Any]) -> Dict[str, float]:
         if previous > 0:
             returns[month] = close / previous - 1
     return returns
+
+
+def _month_end(value: str) -> Optional[date]:
+    try:
+        year, month = (int(part) for part in value[:7].split("-"))
+        if month == 12:
+            return date(year + 1, 1, 1) - timedelta(days=1)
+        return date(year, month + 1, 1) - timedelta(days=1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _protocol_failures(histories: Dict[str, Dict[str, Any]],
+                       protocol: Optional[Dict[str, Any]]) -> List[str]:
+    """Reject any historical test whose information set cannot be reconstructed.
+
+    A current-ticker download is not a point-in-time research dataset.  Historical
+    folds count only with a pre-declared universe, survivorship coverage and an
+    availability timestamp on every price observation.  This deliberately makes
+    the normal live snapshot fail closed until Kestrel has frozen prospective data.
+    """
+    if not protocol:
+        return ["No pre-registered point-in-time test protocol was supplied"]
+    failures = []
+    expected_universe = sorted([*SYMBOLS, BENCHMARK_SYMBOL])
+    if protocol.get("modelVersion") != MODEL_VERSION:
+        failures.append("The protocol is not bound to this exact model version")
+    if protocol.get("benchmark") != BENCHMARK_SYMBOL:
+        failures.append("The benchmark is not the pre-declared VT global equity benchmark")
+    if sorted(protocol.get("universe") or []) != expected_universe:
+        failures.append("The tested universe does not match the pre-declared fixed universe")
+    if protocol.get("survivorshipFree") is not True:
+        failures.append("Inactive and delisted instruments are not explicitly retained")
+    universe_records = protocol.get("universeRecords") or {}
+    for symbol in expected_universe:
+        record = universe_records.get(symbol) or {}
+        if record.get("includedAtFreeze") is not True or record.get("outcomeComplete") is not True:
+            failures.append(f"{symbol} lacks a frozen membership record or complete outcome path")
+    if protocol.get("selectionPolicyFrozen") is not True or not protocol.get("frozenAt"):
+        failures.append("The selection policy was not frozen before testing")
+    if protocol.get("pointInTimePrices") is not True:
+        failures.append("Price inputs are not declared point-in-time")
+    if protocol.get("adjustmentPolicy") != "point_in_time_total_return":
+        failures.append("Corporate-action adjustments are not point-in-time versioned")
+    if not isinstance(protocol.get("lookthroughSnapshots"), list) or not protocol.get("lookthroughSnapshots"):
+        failures.append("No point-in-time ETF look-through snapshots were supplied")
+    cost_bps = _number(protocol.get("oneWayCostBps"))
+    if cost_bps is None or cost_bps < 5:
+        failures.append("The declared one-way trading cost is missing or below 5 bps")
+    for symbol in expected_universe:
+        points = (histories.get(symbol) or {}).get("points") or []
+        if any(not point.get("availableAt") for point in points if isinstance(point, dict)):
+            failures.append(f"{symbol} has observations without availability timestamps")
+            continue
+        for point in points:
+            try:
+                if date.fromisoformat(str(point["availableAt"])) < date.fromisoformat(str(point["date"])):
+                    failures.append(f"{symbol} has an observation marked available before it existed")
+                    break
+            except (KeyError, TypeError, ValueError):
+                failures.append(f"{symbol} has invalid point-in-time timestamps")
+                break
+    return failures
+
+
+def _lookthrough_at(protocol: Dict[str, Any], cutoff: date) -> Optional[Dict[str, Any]]:
+    eligible = []
+    for snapshot in protocol.get("lookthroughSnapshots") or []:
+        try:
+            as_of = date.fromisoformat(str(snapshot.get("asOf")))
+            available = date.fromisoformat(str(snapshot.get("availableAt")))
+        except (TypeError, ValueError):
+            continue
+        if as_of <= available <= cutoff and snapshot.get("complete") is True:
+            eligible.append((available, snapshot))
+    if not eligible:
+        return None
+    available, snapshot = max(eligible, key=lambda item: item[0])
+    if (cutoff - available).days > 120:
+        return None
+    return snapshot
+
+
+def _point_in_time_returns(history: Dict[str, Any], cutoff: str) -> Dict[str, float]:
+    """Return only observations that were available by the fold decision date."""
+    cutoff_date = date.fromisoformat(cutoff)
+    points: Dict[str, float] = {}
+    for point in history.get("points") or []:
+        try:
+            observed = date.fromisoformat(str(point.get("date")))
+            available = date.fromisoformat(str(point.get("availableAt")))
+            close = float(point.get("close"))
+        except (TypeError, ValueError):
+            continue
+        if close > 0 and observed <= cutoff_date and available <= cutoff_date:
+            points[observed.isoformat()[:7]] = close
+    ordered = sorted(points.items())
+    return {
+        month: close / ordered[index - 1][1] - 1
+        for index, (month, close) in enumerate(ordered)
+        if index and ordered[index - 1][1] > 0
+    }
+
+
+def _path_metrics(returns: List[float]) -> Dict[str, Optional[float]]:
+    if not returns:
+        return {"annualReturn": None, "maxDrawdown": None}
+    wealth = peak = 1.0
+    drawdown = 0.0
+    for value in returns:
+        wealth *= 1 + value
+        peak = max(peak, wealth)
+        drawdown = min(drawdown, wealth / peak - 1)
+    annual = wealth ** (12 / len(returns)) - 1 if wealth > 0 else -1.0
+    return {"annualReturn": round(annual * 100, 2), "maxDrawdown": round(drawdown * 100, 2)}
+
+
+def _information_ratio(left: List[float], right: List[float]) -> Optional[float]:
+    differences = [a - b for a, b in zip(left, right)]
+    if len(differences) < 2:
+        return None
+    tracking_error = statistics.stdev(differences)
+    if tracking_error <= 1e-12:
+        return None
+    return round(statistics.fmean(differences) / tracking_error * math.sqrt(12), 2)
+
+
+def _window_bootstrap(windows: List[Dict[str, Any]], comparison: str) -> Dict[str, Any]:
+    if len(windows) < WALK_FORWARD_MIN_WINDOWS:
+        return {"samples": 0, "low": None, "high": None, "method": "Independent-window bootstrap"}
+    rng = random.Random(RANDOM_SEED + (1 if comparison == "candidate" else 2))
+    outcomes = []
+    key = f"{comparison}NetReturn"
+    for _ in range(WALK_FORWARD_BOOTSTRAPS):
+        sample = [windows[rng.randrange(len(windows))] for _ in windows]
+        outcomes.append(statistics.fmean(item["challengerNetReturn"] - item[key] for item in sample))
+    outcomes.sort()
+    return {
+        "samples": WALK_FORWARD_BOOTSTRAPS,
+        "low": round(outcomes[int(0.025 * (len(outcomes) - 1))], 2),
+        "high": round(outcomes[int(0.975 * (len(outcomes) - 1))], 2),
+        "method": "95% interval from resampling whole, non-overlapping test windows",
+    }
+
+
+def walk_forward_evaluation(histories: Dict[str, Dict[str, Any]],
+                            protocol: Optional[Dict[str, Any]],
+                            iterations: int = DEFAULT_ITERATIONS) -> Dict[str, Any]:
+    """Evaluate newly fitted challengers on sealed, non-overlapping future years."""
+    failures = _protocol_failures(histories, protocol)
+    months, full_matrix = _common_matrix(histories)
+    base = {
+        "status": "blocked", "eligible": False, "windows": [], "windowCount": 0,
+        "minimumWindows": WALK_FORWARD_MIN_WINDOWS, "trainingMonths": WALK_FORWARD_TRAIN_MONTHS,
+        "testMonths": WALK_FORWARD_TEST_MONTHS, "benchmark": BENCHMARK_SYMBOL,
+        "failures": failures, "candidateWins": 0, "benchmarkWins": 0,
+        "uncertainty": {"versusCandidate": _window_bootstrap([], "candidate"),
+                        "versusBenchmark": _window_bootstrap([], "benchmark")},
+    }
+    if failures or len(months) < WALK_FORWARD_TRAIN_MONTHS + WALK_FORWARD_TEST_MONTHS:
+        if not failures:
+            base["failures"] = ["Not enough common history for one sealed test window"]
+        return base
+
+    try:
+        frozen_at = date.fromisoformat(str(protocol["frozenAt"]))
+    except (TypeError, ValueError):
+        base["failures"] = ["The protocol freeze date is invalid"]
+        return base
+    first_test_index = next((
+        index for index in range(WALK_FORWARD_TRAIN_MONTHS, len(months))
+        if date.fromisoformat(f"{months[index]}-01") > frozen_at
+    ), None)
+    if first_test_index is None:
+        base["failures"] = ["No outcome month exists after the protocol was frozen"]
+        return base
+
+    cost_rate = float(protocol["oneWayCostBps"]) / 10_000
+    windows: List[Dict[str, Any]] = []
+    challenger_path: List[float] = []
+    candidate_path: List[float] = []
+    benchmark_path: List[float] = []
+    fold_failures: List[str] = []
+    for test_start in range(first_test_index,
+                            len(months) - WALK_FORWARD_TEST_MONTHS + 1,
+                            WALK_FORWARD_TEST_MONTHS):
+        train_months = months[:test_start]
+        test_months = months[test_start:test_start + WALK_FORWARD_TEST_MONTHS]
+        cutoff_month = train_months[-1]
+        cutoff = _month_end(cutoff_month)
+        if cutoff is None:
+            continue
+        cutoff_iso = cutoff.isoformat()
+        fold_lookthrough = _lookthrough_at(protocol, cutoff)
+        if fold_lookthrough is None:
+            fold_failures.append(f"No complete ETF look-through was available at the {cutoff_month} cutoff")
+            continue
+        available = {
+            symbol: _point_in_time_returns(histories[symbol], cutoff_iso)
+            for symbol in [*SYMBOLS, BENCHMARK_SYMBOL]
+        }
+        if any(any(month not in available[symbol] for month in train_months)
+               for symbol in [*SYMBOLS, BENCHMARK_SYMBOL]):
+            continue
+        train_matrix = {symbol: [available[symbol][month] for month in train_months] for symbol in SYMBOLS}
+        challenger, _ = _search(train_matrix, max(100, iterations), fold_lookthrough)
+        test_matrix = {symbol: [full_matrix[symbol][months.index(month)] for month in test_months]
+                       for symbol in SYMBOLS}
+        challenger_returns = _portfolio_returns(challenger, test_matrix)
+        candidate_returns = _portfolio_returns(CANDIDATE_WEIGHTS, test_matrix)
+        benchmark_monthly = _month_returns(histories[BENCHMARK_SYMBOL])
+        benchmark_returns = [benchmark_monthly[month] for month in test_months]
+        turnover = sum(abs(challenger[symbol] - CANDIDATE_WEIGHTS[symbol]) for symbol in SYMBOLS) / 200
+        challenger_returns[0] = (1 + challenger_returns[0]) * (1 - turnover * cost_rate) - 1
+        benchmark_returns[0] = (1 + benchmark_returns[0]) * (1 - cost_rate) - 1
+        compound = lambda values: (math.prod(1 + value for value in values) - 1) * 100
+        challenger_net = compound(challenger_returns)
+        candidate_net = compound(candidate_returns)
+        benchmark_net = compound(benchmark_returns)
+        windows.append({
+            "trainedThrough": cutoff_month, "from": test_months[0], "through": test_months[-1],
+            "challengerNetReturn": round(challenger_net, 2),
+            "candidateNetReturn": round(candidate_net, 2),
+            "benchmarkNetReturn": round(benchmark_net, 2),
+            "versusCandidate": round(challenger_net - candidate_net, 2),
+            "versusBenchmark": round(challenger_net - benchmark_net, 2),
+            "turnoverPercent": round(turnover * 100, 2),
+            "weights": challenger,
+        })
+        challenger_path.extend(challenger_returns)
+        candidate_path.extend(candidate_returns)
+        benchmark_path.extend(benchmark_returns)
+
+    base["windows"] = windows
+    base["windowCount"] = len(windows)
+    base["candidateWins"] = sum(item["versusCandidate"] > 0 for item in windows)
+    base["benchmarkWins"] = sum(item["versusBenchmark"] > 0 for item in windows)
+    base["uncertainty"] = {
+        "versusCandidate": _window_bootstrap(windows, "candidate"),
+        "versusBenchmark": _window_bootstrap(windows, "benchmark"),
+    }
+    base["metrics"] = {
+        "challenger": {**_path_metrics(challenger_path),
+                       "informationRatioVsBenchmark": _information_ratio(challenger_path, benchmark_path),
+                       "informationRatioVsCandidate": _information_ratio(challenger_path, candidate_path)},
+        "candidate": _path_metrics(candidate_path),
+        "benchmark": _path_metrics(benchmark_path),
+    }
+    candidate_interval = base["uncertainty"]["versusCandidate"]
+    benchmark_interval = base["uncertainty"]["versusBenchmark"]
+    enough = len(windows) >= WALK_FORWARD_MIN_WINDOWS
+    required_wins = math.ceil(len(windows) * 0.8) if enough else WALK_FORWARD_MIN_WINDOWS
+    evidence_strong = bool(
+        enough
+        and not fold_failures
+        and base["candidateWins"] >= required_wins
+        and base["benchmarkWins"] >= required_wins
+        and candidate_interval["low"] is not None and candidate_interval["low"] > 0
+        and benchmark_interval["low"] is not None and benchmark_interval["low"] > 0
+        and (base["metrics"]["challenger"]["informationRatioVsBenchmark"] or 0) > 0
+    )
+    base["eligible"] = evidence_strong
+    base["status"] = "passed" if evidence_strong else "blocked" if fold_failures else "insufficient_evidence"
+    if fold_failures:
+        base["failures"] = fold_failures
+    elif not enough:
+        base["failures"] = [f"Only {len(windows)} of {WALK_FORWARD_MIN_WINDOWS} independent windows are available"]
+    elif not evidence_strong:
+        base["failures"] = ["Net outperformance is not consistent and its 95% intervals do not both exclude zero"]
+    return base
 
 
 def _common_matrix(histories: Dict[str, Dict[str, Any]]) -> Tuple[List[str], Dict[str, List[float]]]:
@@ -310,7 +585,8 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
                               iterations: int = DEFAULT_ITERATIONS,
                               lookthrough: Optional[Dict[str, Any]] = None,
                               fundamentals: Optional[Dict[str, Any]] = None,
-                              dcf_risk_free: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                              dcf_risk_free: Optional[Dict[str, Any]] = None,
+                              walk_forward_protocol: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     months, matrix = _common_matrix(histories)
     coverage = []
     for symbol in [*SYMBOLS, BENCHMARK_SYMBOL]:
@@ -346,6 +622,9 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
         fundamental_price_ready = fundamental_price_total if (fundamentals or {}).get("priceCrossCheckReady") else 0
     fundamental_cashflow = (fundamentals or {}).get("cashFlow") or {}
     dcf = build_dcf_snapshot(fundamental_cashflow, histories, risk_free=dcf_risk_free)
+    walk_forward = walk_forward_evaluation(
+        histories, walk_forward_protocol, iterations=min(iterations, 2_000)
+    )
     gates = [
         {"id": "price_coverage", "name": "At least three years for every holding",
          "passed": all(item["ready"] for item in coverage if item["symbol"] != BENCHMARK_SYMBOL)},
@@ -375,7 +654,11 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
              f'{dcf.get("investmentCompaniesReady", 0)} of {dcf.get("companiesTotal", 8)} companies have dated issuer evidence and a depreciation cross-check'
          )},
         {"id": "walk_forward", "name": "Challenger wins unseen walk-forward periods",
-         "passed": False},
+         "passed": bool(walk_forward.get("eligible")), "detail": (
+             f'{walk_forward.get("windowCount", 0)} of {walk_forward.get("minimumWindows", WALK_FORWARD_MIN_WINDOWS)} '
+             + f'independent windows; {walk_forward.get("candidateWins", 0)} wins versus Candidate 1; '
+             + f'{walk_forward.get("benchmarkWins", 0)} wins versus VT'
+         )},
         {"id": "costs", "name": "Turnover and estimated trading cost included",
          "passed": True},
     ]
@@ -404,6 +687,7 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
                        "metrics": challenger_metrics, "bootstrap": _bootstrap(challenger, matrix),
                        "changes": changes, "promotionReady": promotion_ready},
         "benchmark": _benchmark_metrics(histories, months),
+        "walkForward": walk_forward,
         "research": {
             "portfoliosTested": tested,
             "commonMonths": len(months),
@@ -444,11 +728,13 @@ def _fetch_history(symbol: str) -> Dict[str, Any]:
 
 def portfolio_science_snapshot(force: bool = False,
                                provider: Optional[Callable[[str], Dict[str, Any]]] = None,
-                               iterations: int = DEFAULT_ITERATIONS) -> Dict[str, Any]:
+                               iterations: int = DEFAULT_ITERATIONS,
+                               walk_forward_protocol: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     global _CACHE
     now = int(time.time())
     with _LOCK:
-        if provider is None and not force and _CACHE and now - int(_CACHE.get("generatedAt") or 0) < CACHE_SECONDS:
+        if (provider is None and walk_forward_protocol is None and not force and _CACHE
+                and now - int(_CACHE.get("generatedAt") or 0) < CACHE_SECONDS):
             return dict(_CACHE)
         fetch = provider or _fetch_history
         histories: Dict[str, Dict[str, Any]] = {}
@@ -464,13 +750,13 @@ def portfolio_science_snapshot(force: bool = False,
         dcf_risk_free = official_treasury_10y() if provider is None else None
         payload = analyze_portfolio_science(
             histories, iterations=iterations, lookthrough=lookthrough, fundamentals=fundamentals,
-            dcf_risk_free=dcf_risk_free,
+            dcf_risk_free=dcf_risk_free, walk_forward_protocol=walk_forward_protocol,
         )
         payload["errors"] = errors
         if errors:
             payload["status"] = "data_incomplete"
             payload["title"] = "Candidate 1 remains frozen"
             payload["message"] = "Some histories were unavailable, so no challenger can be promoted."
-        if provider is None:
+        if provider is None and walk_forward_protocol is None:
             _CACHE = dict(payload)
         return payload
