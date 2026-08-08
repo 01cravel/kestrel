@@ -16,6 +16,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -24,7 +25,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATABASE = ROOT / ".kestrel-data" / "universe" / "universe-ledger.sqlite3"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PROTOCOL_VERSION = "bitemporal-universe-v2"
 COMPLETE_OUTCOMES = {"complete", "delisted_complete"}
 OUTCOME_STATUSES = {"pending", "complete", "missing", "conflict", "delisted_complete"}
@@ -109,17 +110,105 @@ class UniverseLedger:
     def connect(self, create: bool = True) -> sqlite3.Connection:
         if create:
             self.database.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(str(self.database))
+        connection = sqlite3.connect(str(self.database), timeout=30)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=30000")
+        connection.execute("PRAGMA trusted_schema=OFF")
         if create:
             connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=FULL")
             self._migrate(connection)
         return connection
 
     @staticmethod
     def _migrate(connection: sqlite3.Connection) -> None:
+        tables_before = {str(row[0]) for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        prior_version = 0
+        user_tables_before = {name for name in tables_before if not name.startswith("sqlite_")}
+        if user_tables_before and "ledger_metadata" not in user_tables_before:
+            raise RuntimeError("Unversioned ledger schema cannot be migrated safely")
+        if "ledger_metadata" in tables_before:
+            row = connection.execute(
+                "SELECT value FROM ledger_metadata WHERE key='schema_version'"
+            ).fetchone()
+            try:
+                prior_version = int(row[0]) if row else 0
+            except (TypeError, ValueError) as error:
+                raise RuntimeError("Ledger schema version is invalid") from error
+            if prior_version not in {1, 2, SCHEMA_VERSION}:
+                raise RuntimeError(
+                    f"Ledger schema {prior_version} is incompatible with {SCHEMA_VERSION}"
+                )
+            required_prior = {
+                "ledger_metadata", "universe_snapshots", "identity_versions",
+                "snapshot_members", "evidence_versions", "lookthrough_versions",
+                "outcome_versions",
+            }
+            if prior_version == SCHEMA_VERSION:
+                required_prior.add("schema_migrations")
+            missing = required_prior - tables_before
+            if missing:
+                raise RuntimeError(
+                    "Ledger schema is incomplete before migration: " + ", ".join(sorted(missing))
+                )
+            if prior_version == SCHEMA_VERSION:
+                outcome_columns = {
+                    str(row[1]) for row in connection.execute("PRAGMA table_info(outcome_versions)")
+                }
+                required_outcomes = {
+                    "effective_at", "available_at", "retrieved_at", "listing_state",
+                    "adjustment_definition", "consideration_json", "source_record_hash",
+                    "evidence_hash",
+                }
+                if not required_outcomes.issubset(outcome_columns):
+                    raise RuntimeError("Current ledger schema is missing required outcome columns")
+                trigger_sql = {str(row[0]): str(row[1] or "").upper() for row in connection.execute(
+                    "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
+                )}
+                immutable_tables = (*sorted(required_prior - {"ledger_metadata"}),)
+                invalid_triggers = []
+                for table in immutable_tables:
+                    for suffix, action, message in (
+                        ("no_update", "UPDATE", "UPDATED"),
+                        ("no_delete", "DELETE", "DELETED"),
+                    ):
+                        name = f"{table}_{suffix}"
+                        sql = trigger_sql.get(name, "")
+                        if (
+                            f"BEFORE {action} ON {table}".upper() not in sql
+                            or "RAISE(ABORT" not in sql
+                            or f"IMMUTABLE LEDGER ROWS CANNOT BE {message}" not in sql
+                        ):
+                            invalid_triggers.append(name)
+                if invalid_triggers:
+                    raise RuntimeError("Current ledger schema is missing immutable triggers")
+                migrations = [tuple(row) for row in connection.execute(
+                    "SELECT version, migration_hash FROM schema_migrations ORDER BY version"
+                )]
+                expected_migrations = [
+                    (version, _digest({
+                        "ledger": "universe", "schemaVersion": version,
+                        "migration": (
+                            "initial-bitemporal-ledger" if version == 1 else
+                            "outcome-provenance" if version == 2 else
+                            "operational-integrity"
+                        ),
+                    })) for version in range(1, SCHEMA_VERSION + 1)
+                ]
+                if migrations != expected_migrations:
+                    raise RuntimeError("Ledger migration history is incomplete or incompatible")
+                identity = connection.execute(
+                    "SELECT value FROM ledger_metadata WHERE key='database_id'"
+                ).fetchone()
+                if not identity or not _sha256(identity[0]):
+                    raise RuntimeError("Ledger database identity is missing or invalid")
+                return
         connection.executescript(
             """
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS ledger_metadata (
                 key TEXT PRIMARY KEY, value TEXT NOT NULL
             );
@@ -217,6 +306,11 @@ class UniverseLedger:
             );
             CREATE INDEX IF NOT EXISTS outcome_versions_latest
                 ON outcome_versions(snapshot_id, security_id, valid_through, recorded_at);
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL,
+                migration_hash TEXT NOT NULL
+            );
             """
         )
         # Version 2 makes the evidence clock and return definition first-class.
@@ -235,7 +329,21 @@ class UniverseLedger:
         immutable_tables = (
             "universe_snapshots", "identity_versions", "snapshot_members",
             "evidence_versions", "lookthrough_versions", "outcome_versions",
+            "schema_migrations",
         )
+        migration_time = _now()
+        for version in range(1, SCHEMA_VERSION + 1):
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at, migration_hash) VALUES(?, ?, ?)",
+                (version, migration_time, _digest({
+                    "ledger": "universe", "schemaVersion": version,
+                    "migration": (
+                        "initial-bitemporal-ledger" if version == 1 else
+                        "outcome-provenance" if version == 2 else
+                        "operational-integrity"
+                    ),
+                })),
+            )
         for table in immutable_tables:
             connection.execute(
                 f"""CREATE TRIGGER IF NOT EXISTS {table}_no_update
@@ -248,10 +356,24 @@ class UniverseLedger:
                     SELECT RAISE(ABORT, 'immutable ledger rows cannot be deleted'); END"""
             )
         connection.execute(
-            "INSERT OR REPLACE INTO ledger_metadata(key, value) VALUES('schema_version', ?)",
+            "INSERT INTO ledger_metadata(key, value) VALUES('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (str(SCHEMA_VERSION),),
         )
+        connection.execute(
+            "INSERT OR IGNORE INTO ledger_metadata(key, value) VALUES('database_id', ?)",
+            (hashlib.sha256(os.urandom(32)).hexdigest(),),
+        )
         connection.commit()
+
+        # Migration is complete only when the exact resulting schema passes a
+        # read-only audit. This also catches trigger loss or partial ALTERs.
+        recorded = connection.execute(
+            "SELECT value FROM ledger_metadata WHERE key='schema_version'"
+        ).fetchone()
+        if not recorded or int(recorded[0]) != SCHEMA_VERSION:
+            raise RuntimeError("Ledger migration did not record the expected schema version")
+        UniverseLedger._migrate(connection)
 
     @staticmethod
     def _normalize_member(record: Dict[str, Any], decision_date: str, cutoff: str,
@@ -413,6 +535,7 @@ class UniverseLedger:
         snapshot_id = _digest({"manifestHash": manifest_hash, "cutoffUtc": cutoff})
         status = "complete" if not issues else "incomplete"
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """SELECT snapshot_id, manifest_hash, status FROM universe_snapshots
                    WHERE decision_date=? AND model_version=? AND policy_version=?
@@ -428,7 +551,6 @@ class UniverseLedger:
                         "snapshotStatus": existing["status"], "manifestHash": existing["manifest_hash"],
                         "attemptedManifestHash": manifest_hash,
                         "reason": "A different immutable snapshot already exists for this decision date."}
-            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 "INSERT INTO universe_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (snapshot_id, day, cutoff, recorded, model_version, policy_version,
@@ -542,6 +664,7 @@ class UniverseLedger:
         }
         outcome_id = _digest(outcome)
         with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             member = connection.execute(
                 "SELECT 1 FROM snapshot_members WHERE snapshot_id=? AND security_id=?",
                 (snapshot_id, security_id),
@@ -604,9 +727,53 @@ class UniverseLedger:
             "payloadsClean": payloads_clean,
         }
 
+    def audit(self) -> Dict[str, Any]:
+        """Run the deterministic, read-only operational integrity audit."""
+        from ledger_maintenance import audit_database
+
+        return audit_database(self.database, SCHEMA_VERSION)
+
+    def backup(self, directory: Optional[Path] = None) -> Dict[str, Any]:
+        """Create and verify a concurrent-safe content-addressed backup."""
+        from ledger_maintenance import create_backup
+
+        destination = directory or self.database.parent / "backups"
+        return create_backup(self.database, Path(destination), SCHEMA_VERSION)
+
+    def recovery_health(self, directory: Optional[Path] = None) -> Dict[str, Any]:
+        """Verify all published recovery points for this ledger identity."""
+        from ledger_maintenance import audit_backup_directory
+
+        health = self.audit()
+        if not health.get("databaseId"):
+            return {
+                "status": "unavailable", "healthy": False, "verifiedBackups": 0,
+                "failures": ["Ledger identity is unavailable"],
+            }
+        destination = directory or self.database.parent / "backups"
+        return audit_backup_directory(
+            Path(destination), SCHEMA_VERSION, health["databaseId"]
+        )
+
+    def restore(self, backup: Path, manifest: Path, target: Path,
+                expected_database_id: str) -> Dict[str, Any]:
+        """Recover a verified backup to a new path, never over the live ledger."""
+        from ledger_maintenance import restore_backup
+
+        return restore_backup(
+            backup, manifest, target, SCHEMA_VERSION, expected_database_id,
+            live_database=self.database,
+        )
+
     def latest(self) -> Dict[str, Any]:
         if not self.database.exists():
-            return {"status": "empty", "database": str(self.database), "snapshots": 0}
+            return {
+                "status": "empty", "database": str(self.database), "snapshots": 0,
+                "health": self.audit(),
+            }
+        health = self.audit()
+        if not health.get("healthy"):
+            return {"status": "blocked", "database": str(self.database), "health": health}
         with self.connect(create=False) as connection:
             row = connection.execute(
                 "SELECT snapshot_id FROM universe_snapshots ORDER BY cutoff_utc DESC LIMIT 1"
@@ -628,9 +795,13 @@ class UniverseLedger:
                 outcome_states[state] = outcome_states.get(state, 0) + 1
             counts["outcomeStates"] = outcome_states
         if not row:
-            return {"status": "empty", "database": str(self.database), **counts}
+            return {
+                "status": "empty", "database": str(self.database), **counts,
+                "health": health, "recovery": self.recovery_health(),
+            }
         return {"status": "ready", "database": str(self.database), **counts,
-                "latest": self.reconstruct(row["snapshot_id"])}
+                "latest": self.reconstruct(row["snapshot_id"]), "health": health,
+                "recovery": self.recovery_health()}
 
     def build_protocol(self, snapshot_id: str, expected_symbols: Iterable[str],
                        benchmark: str, one_way_cost_bps: float) -> Dict[str, Any]:
