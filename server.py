@@ -26,6 +26,7 @@ from investor_history import investor_calibration_summary, record_investor_ideas
 from learning import learning_status
 from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refresh_market_integrity
 from mover_autopsy import mover_snapshot
+from portfolio_science import portfolio_science_snapshot
 from price_history import FMP_KEY, benchmark_performance, historical_prices, intraday_prices, portfolio_risk_statistics
 from sec_data import verify_with_sec
 from security_master import refresh_security_master, security_master_snapshot
@@ -44,7 +45,7 @@ HOST = "127.0.0.1"
 PORT = int(os.environ.get("KESTREL_PORT", "3050"))
 
 HOLDINGS_UNIVERSE = [
-    "MU", "SPY", "NBIS", "VRT", "V", "GLD", "CAT", "NVDA", "RKLB", "LLY",
+    "MU", "SPY", "GMOI", "IEMG", "NBIS", "VRT", "V", "GLD", "CAT", "NVDA", "RKLB", "LLY",
     "MA", "HCA", "AVGO", "STX", "GOOGL", "AXP", "AMD", "CEG", "QBTS", "COHR", "ONDS",
     "DELL", "ETN", "CRDO", "MRVL", "NOW", "RGTI", "SPCX", "BTC",
 ]
@@ -54,13 +55,18 @@ BASE_OPPORTUNITY_UNIVERSE = [
     "NVO", "MELI", "SAP", "SONY", "UL", "TTE",
 ]
 
+ULTIMATE_PORTFOLIO_SYMBOLS = [
+    "VTI", "AVUV", "VEA", "IEMG", "AVDV", "PAVE", "TSM", "GOOGL",
+    "AMZN", "ASML", "MELI", "ETN", "ISRG", "CEG", "IBIT", "SGOV",
+]
+
 BASE_ALL_SYMBOLS = list(dict.fromkeys(HOLDINGS_UNIVERSE + BASE_OPPORTUNITY_UNIVERSE))
 API_GAP_SECONDS = 1.05
 QUOTE_REFRESH_SECONDS = 15 * 60
 FULL_REFRESH_SECONDS = 6 * 60 * 60
 SEC_REFRESH_SECONDS = 24 * 60 * 60
 ANALYST_REFRESH_SECONDS = 24 * 60 * 60
-SEC_EXCLUDED_SYMBOLS = {"SPY", "GLD", "BTC"}
+SEC_EXCLUDED_SYMBOLS = {"SPY", "GMOI", "IEMG", "GLD", "BTC"}
 MARKET_SYMBOLS = {"BTC": "BINANCE:BTCUSDT"}
 PORTFOLIO_LOCK = threading.Lock()
 
@@ -605,7 +611,8 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             query = urllib.parse.parse_qs(parsed.query)
             symbol = str(query.get("symbol", [""])[0]).upper()
             range_name = str(query.get("range", ["1y"])[0]).lower()
-            if symbol not in all_symbols():
+            history_universe = list(dict.fromkeys(all_symbols() + ULTIMATE_PORTFOLIO_SYMBOLS))
+            if symbol not in history_universe:
                 self.send_json({"ok": False, "message": "Unknown symbol"}, status=400)
                 return
             try:
@@ -638,7 +645,7 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             symbols = list(dict.fromkeys(
                 symbol.strip().upper() for symbol in raw_symbols.split(",") if symbol.strip()
             ))
-            universe = all_symbols()
+            universe = list(dict.fromkeys(all_symbols() + ULTIMATE_PORTFOLIO_SYMBOLS))
             if not symbols or len(symbols) > len(universe):
                 self.send_json({"ok": False, "message": "Choose between 1 and 37 symbols"}, status=400)
                 return
@@ -656,7 +663,7 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             symbols = list(dict.fromkeys(
                 symbol.strip().upper() for symbol in raw_symbols.split(",") if symbol.strip()
             ))
-            universe = all_symbols()
+            universe = list(dict.fromkeys(all_symbols() + ULTIMATE_PORTFOLIO_SYMBOLS))
             if not symbols or len(symbols) > len(universe):
                 self.send_json({"ok": False, "message": f"Choose between 1 and {len(universe)} symbols"}, status=400)
                 return
@@ -665,6 +672,12 @@ class KestrelHandler(SimpleHTTPRequestHandler):
                 return
             try:
                 self.send_json(portfolio_risk_statistics(symbols))
+            except (RuntimeError, ValueError) as error:
+                self.send_json({"ok": False, "message": str(error)}, status=502)
+            return
+        if parsed.path == "/api/portfolio-science":
+            try:
+                self.send_json(portfolio_science_snapshot())
             except (RuntimeError, ValueError) as error:
                 self.send_json({"ok": False, "message": str(error)}, status=502)
             return

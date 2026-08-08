@@ -34,6 +34,7 @@ from swing_radar_policy import (
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = ROOT / ".kestrel-data" / "market-history"
 DEFAULT_DATABASE = DEFAULT_DATA_DIR / "market-history.sqlite3"
+SECRETS_PATH = ROOT / ".kestrel-secrets.json"
 BASE_URL = "https://api.massive.com"
 SCHEMA_VERSION = 1
 SOURCE_NAME = "Massive Stocks REST API"
@@ -43,6 +44,19 @@ LABEL_TAIL_CALENDAR_DAYS = 14
 MASSIVE_SECURITY_TYPE_MAP = {
     "CS": "common_stock", "ADRC": "adr", "ADRP": "adr", "GDR": "adr",
 }
+
+
+def load_private_key(name: str) -> str:
+    """Read a local key without ever putting it in the source tree."""
+    configured = os.environ.get(name, "").strip()
+    if configured:
+        return configured
+    try:
+        secrets = json.loads(SECRETS_PATH.read_text(encoding="utf-8"))
+        value = secrets.get(name) if isinstance(secrets, dict) else None
+        return str(value or "").strip()
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return ""
 
 
 def utc_now() -> str:
@@ -776,7 +790,7 @@ def plan(start: dt.date, end: dt.date, store: MarketHistoryStore) -> Dict[str, A
         "weekdayRequestsMaximum": len(candidate_dates), "groupedDailyRequestsRemaining": len(remaining),
         "reference": "monthly point-in-time active identities plus inactive/delisted identities at range end",
         "corporateActions": ["splits", "dividends"], "includeOtc": False,
-        "database": str(store.database), "apiKeyConfigured": bool(os.environ.get("MASSIVE_API_KEY", "").strip()),
+        "database": str(store.database), "apiKeyConfigured": bool(load_private_key("MASSIVE_API_KEY")),
     }
 
 
@@ -820,7 +834,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report["status"] == "valid" else 1
 
-    api_key = os.environ.get("MASSIVE_API_KEY", "").strip()
+    api_key = load_private_key("MASSIVE_API_KEY")
     if not api_key:
         print("MASSIVE_API_KEY is not configured. Run the plan command for a safe dry run.", file=sys.stderr)
         return 2

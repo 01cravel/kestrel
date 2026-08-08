@@ -12,7 +12,12 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 
 ## Delivery status
 
-- 🚧 **Next priority: build Luke’s selection-agnostic Ideal Portfolio for an 8/10 risk mandate.**
+- 🚧 **Next priority: run the scientific challenger through unseen walk-forward periods.**
+- ✅ Selection-agnostic $300,000 Ultimate Portfolio for an 8/10 risk mandate, with explicit weights, explanations, stress cases and an editable capital base.
+- ✅ Scientific challenger with conservative return shrinkage, covariance shrinkage, 20,000 constrained alternatives, bootstrap ranges and fail-closed promotion gates.
+- ✅ Official ETF look-through for VTI, AVUV, VEA, IEMG, AVDV and PAVE. Direct and hidden company exposure is combined, source freshness and reconciliation are checked, and the challenger enforces an 8% true-company ceiling.
+- 🚧 Point-in-time valuation reconstructs trailing P/E and free cash flow only from SEC facts available by each filing date, pairs them with split-normalized prices and applies the matching mechanical adjustment to old per-share facts and share counts. ASML's euro figures use official ECB rates. Cash-flow yield uses operating cash flow less productive-asset purchases and compares each company only with its own history. Every working Yahoo close is independently checked against Nasdaq's official history with an exact-date, 1% tolerance rule; missing coverage or disagreement fails closed. TSM's EPS remains stale, Amazon currently has negative free cash flow after heavy investment, and CEG has too little standalone cash-flow history for a firm conclusion.
+- 🚧 A conservative five-year equity DCF now shows downside, base and strong-execution sensitivities. It uses the lower of current cash per share or its recent median, company-specific historical growth capped at 8% in the base case, a beta-derived discount rate floored at 10.5%, and 1.5%–2.5% perpetual growth. Negative cash flow, short history, inadequate beta evidence or terminal value above 80% fails closed; the outputs are ranges, never targets.
 - ✅ Private Sarwa snapshot staging, reconciliation, backups, and a review-before-apply dashboard flow.
 - ✅ First signed-in Sarwa Trade capture: 24 positions, cash, account total, and a validated comparison against Kestrel.
 - ✅ SEC filing verification, source links, conflict checks, and confidence gates.
@@ -33,16 +38,18 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 
 ## Immediate next — Complete the truth layer
 
-The source policy is now explicit in [SOURCE_POLICY.md](SOURCE_POLICY.md). Kestrel currently has authoritative portfolio records and US filings, but pricing, corporate actions, security identity, international filings, fund look-through, analyst expectations and the portfolio risk model are not yet strong enough for the highest-confidence decisions.
+The source policy is now explicit in [SOURCE_POLICY.md](SOURCE_POLICY.md). Kestrel currently has authoritative portfolio records, US filings and current official look-through for the six Ultimate Portfolio equity ETFs, but pricing, corporate actions, international filings, analyst expectations and the portfolio risk model are not yet strong enough for the highest-confidence decisions.
 
 1. ✅ Build a permanent security master using FIGI plus regulator, exchange, currency and share-class identifiers. A ticker alone is not an identity.
 2. 🚧 Strengthen prices and corporate actions without imposing a permanent fee. The default layer now uses two price feeds, stale-data checks, public split events and adjusted-history discontinuity detection. Add Databento pay-as-you-go official closes when the free account is ready. Reconsider premium reference data only after measured avoided errors or improved decisions exceed its annual cost.
 3. 🚧 Add accountable analyst evidence. The Benzinga named-ratings adapter is complete and requires at least three recent firms plus agreement with the broader consensus. Test its free API trial across the full portfolio before paying. Add Morningstar independent fair value as a separate valuation check only if the licence proves worthwhile; reserve LSEG I/B/E/S or FactSet for a later institutional upgrade.
    - Preserve every analyst call exactly as published and score its 3-, 6- and 12-month result against the relevant benchmark. Vendor accuracy statistics may be shown, but Kestrel’s own point-in-time outcome record decides how much trust each analyst earns.
-4. Add issuer holdings, prospectus fees and SEC Form N-PORT for ETFs.
-5. Add FRED/ALFRED and original-agency vintages for rates, inflation and macro regimes.
-6. Expand official filing ingestion market by market through ESMA ESEF, FCA NSM and local regulators.
-7. Only then unlock High confidence, Ultra Buy and Ideal Portfolio target weights that depend on those inputs.
+4. 🚧 Issuer holdings are connected and fail closed when stale or incomplete. Add prospectus fees, archived point-in-time holdings and SEC Form N-PORT before historical look-through testing.
+5. 🚧 As-filed SEC earnings, free-cash-flow valuation and the independent Nasdaq historical-price cross-check are connected for all eight direct companies. Add enough current TSM earnings and CEG cash-flow history before this gate can pass.
+6. 🚧 Conservative scenario DCF is connected. Add explicit maintenance-versus-growth investment, net borrowing and balance-sheet adjustments before treating the levered cash-flow proxy as full FCFE.
+7. Add FRED/ALFRED and original-agency vintages for rates, inflation and macro regimes.
+8. Expand official filing ingestion market by market through ESMA ESEF, FCA NSM and local regulators.
+9. Only then unlock High confidence, Ultra Buy and Ideal Portfolio target weights that depend on those inputs.
 
 ### No-cost accuracy upgrades before another data subscription
 
