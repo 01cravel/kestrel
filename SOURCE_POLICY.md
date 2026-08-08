@@ -35,7 +35,7 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 | Company guidance and earnings releases | SEC-filed issuer release or a publication on a verified official investor-relations domain | Retain the exact SEC acceptance or IR publication timestamp, metric definition, fiscal period, endpoints, unit, currency and original wording. Compare only an identical metric/definition/period/unit/currency key. Conflicts, missing timestamps and ambiguous units fail closed; no midpoint is inferred | On-demand 8-K/6-K filing-package ingestion and deterministic range comparison are connected at `/api/guidance`. Non-filed IR releases require a verified issuer domain and timezone-bearing publication timestamp |
 | Proven-investor holdings | SEC Form 13F filing and information table | Use disclosed changes and portfolio conviction to discover research candidates; never treat delayed ownership as a Buy signal | Direct latest-versus-prior 13F comparison connected for eight deliberately selected long-equity managers, with CUSIP-to-ticker identity checks |
 | ETF holdings and fees | Issuer holdings/prospectus plus SEC Form N-PORT | Verify look-through exposure, fee, derivatives, cash and reporting lag | Planned |
-| Rates, inflation and economy | Original agency releases; FRED/ALFRED for series metadata and vintages | Backtests use the data vintage available on the decision date | Planned |
+| Rates, inflation and economy | Original agency releases; FRED/ALFRED for observations and vintages | Backtests use only the end-of-day vintage available on the decision date; missing or stale evidence disables the label | Connected for a minimal US evidence set; context only, with no rating impact |
 | Portfolio risk | Reproducible derivation from point-in-time, corporate-action-adjusted total returns | Use shrinkage covariance, factor exposures and stress scenarios; reject unstable weights | Simple concentration and beta only |
 
 ## Rating gates
@@ -63,6 +63,48 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 - No unresolved source conflict, stale critical field, or model warning remains.
 
 Until those sources are connected, Kestrel caps confidence at **Medium** and disables **Ultra Buy**.
+
+## Point-in-time macro evidence
+
+The minimal US regime set deliberately uses five official series rather than a broad,
+fragile dashboard:
+
+| Evidence | Series | Original agency and release | Derived use |
+|---|---|---|---|
+| Two-year Treasury yield | `DGS2` | Federal Reserve Board, H.15 Selected Interest Rates | Current rate level and yield-curve slope |
+| Ten-year Treasury yield | `DGS10` | Federal Reserve Board, H.15 Selected Interest Rates | Current rate level and yield-curve slope |
+| Headline CPI-U | `CPIAUCSL` | Bureau of Labor Statistics, Consumer Price Index | Twelve-month inflation and three-month direction |
+| Unemployment rate | `UNRATE` | Bureau of Labor Statistics, Employment Situation | Three-month labour-market direction |
+| Real GDP | `GDPC1` | Bureau of Economic Analysis, Gross Domestic Product | Latest annualised quarter-on-quarter growth |
+
+For a cutoff date, Kestrel requests the ALFRED real-time period where
+`realtime_start` and `realtime_end` both equal that cutoff. It separately records the
+latest series release or revision vintage no later than the cutoff. Observation dates,
+requested vintage, original agency, release, units, retrieval time and transformations
+remain visible. The current cache lasts 12 hours; a historical snapshot becomes
+immutable only after it has been fetched on a later calendar day.
+
+Daily yield vintages older than 7 days, monthly release vintages older than 45 days,
+or GDP vintages older than 120 days are stale. Observation ages are separately capped
+at 10, 75 and 240 days respectively. A missing series, missing expected month or
+quarter, mismatched yield date, insufficient history for a derived measure, stale
+vintage, future cutoff or failed refresh produces an unavailable regime.
+An older cache may remain visible for diagnosis after a refresh failure, but it is
+marked stale and disabled. The cutoff is end-of-day only and must not be used for
+intraday release decisions.
+
+The label is a compact description for regime-stratified validation. It is not a
+forecast, an NBER recession determination, or evidence about any company. Its declared
+rating impact is always `none`; company filings, valuation, market integrity and
+whole-portfolio evidence remain independent gates.
+
+The descriptive rules are fixed before testing: negative latest real-GDP growth is
+`contracting`; CPI inflation of at least 3% is `elevated` and below 1% is `low`; a
+three-month unemployment increase of at least 0.3 percentage points is `weakening`;
+and a negative 10-year minus 2-year spread is `inverted`. `downturn_risk` requires
+both contracting GDP and weakening labour, while `inflationary_expansion` requires
+positive GDP growth and elevated CPI. These names describe the evidence combination;
+they do not declare a recession or predict returns.
 
 ## Ideal Portfolio gates
 
@@ -92,7 +134,12 @@ Company guidance may update a plain-English thesis, but it cannot override valua
 - DTCC corporate actions: https://www.dtcc.com/data-services/corporate-actions-and-reference-data
 - Databento official consolidated closes: https://databento.com/docs/examples/equities/closing-prices
 - Databento corporate actions and adjustment factors: https://databento.com/docs/venues-and-datasets/corporate-actions
-- FRED and ALFRED API: https://fred.stlouisfed.org/docs/api/fred/overview.html
+- FRED and ALFRED observations API: https://fred.stlouisfed.org/docs/api/fred/series_observations.html
+- ALFRED vintage dates API: https://fred.stlouisfed.org/docs/api/fred/series_vintagedates.html
+- Federal Reserve H.15 Selected Interest Rates: https://www.federalreserve.gov/releases/h15/
+- BLS Consumer Price Index: https://www.bls.gov/cpi/
+- BLS Employment Situation: https://www.bls.gov/news.release/empsit.toc.htm
+- BEA Gross Domestic Product: https://www.bea.gov/data/gdp/gross-domestic-product
 - US Treasury rates feed: https://home.treasury.gov/treasury-daily-interest-rate-xml-feed
 - BLS public API: https://www.bls.gov/developers/home.htm
 - Nasdaq market data products: https://www.nasdaqtrader.com/Trader.aspx?id=mddataproducts

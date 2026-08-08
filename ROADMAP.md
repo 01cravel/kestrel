@@ -23,6 +23,7 @@ Kestrel is decision support for long-term portfolio changes, not an automated tr
 - ✅ First signed-in Sarwa Trade capture: 24 positions, cash, account total, and a validated comparison against Kestrel.
 - ✅ SEC filing verification, source links, conflict checks, and confidence gates.
 - ✅ Machine-readable source hierarchy, evidence-health API, dashboard truth status, and a global Medium-confidence ceiling while critical sources remain provisional.
+- ✅ Point-in-time US macro evidence from FRED/ALFRED: Federal Reserve rate-curve vintages, BLS inflation and unemployment vintages, and BEA real-GDP vintages. Historical cutoffs cannot see later revisions; missing or stale evidence disables the descriptive regime, which has no direct rating impact.
 - ✅ Permanent security master using OpenFIGI and SEC CIK, with fund/ADR handling, ambiguity refusal, and per-instrument confidence gates.
 - ✅ Cost-controlled market integrity: daily prices are independently cross-checked, stale data is rejected, and adjusted histories are scanned for unexplained split-sized jumps. Databento pay-as-you-go official closes remain an optional upgrade; no $199 subscription is required.
 - ✅ Interactive `1D`, `1W`, `1M`, `1Y`, `5Y`, and `All` price graph.
@@ -49,7 +50,7 @@ The source policy is now explicit in [SOURCE_POLICY.md](SOURCE_POLICY.md). Kestr
 4. 🚧 Issuer holdings are connected and fail closed when stale or incomplete. Add prospectus fees, archived point-in-time holdings and SEC Form N-PORT before historical look-through testing.
 5. 🚧 As-filed SEC earnings, free-cash-flow valuation and the independent Nasdaq historical-price cross-check are connected for all eight direct companies. Add enough current TSM earnings and CEG cash-flow history before this gate can pass.
 6. 🚧 The maintenance-versus-growth model now feeds a separately gated, balance-sheet-vetted FCFE range. Cash, debt, leases, minority interests and net borrowing retain their SEC tags, filing dates and periods; incomplete or mismatched evidence closes the gate. Add directly quantified maintenance disclosures where issuers provide them and build longer complete net-borrowing histories before this lens can pass across the portfolio.
-7. Add FRED/ALFRED and original-agency vintages for rates, inflation and macro regimes.
+7. ✅ Add FRED/ALFRED and original-agency vintages for rates, inflation and macro regimes. The first five-series US set is connected as end-of-day research context only. Validate regime-stratified results across multiple cycles before considering any capped model influence.
 8. Expand official filing ingestion market by market through ESMA ESEF, FCA NSM and local regulators.
 9. Only then unlock High confidence, Ultra Buy and Ideal Portfolio target weights that depend on those inputs.
 
@@ -289,7 +290,7 @@ Hit rate remains a useful diagnostic, but is never a sufficient success measure.
 
 - 🚧 Build the bitemporal security master and point-in-time universe. `feature_store.py` builds versioned, as-of-safe feature rows from the archive and `learning_dataset.py` joins them to delayed-entry outcomes; the security master is not yet bitemporal and dead listings are still missing.
 - Reconstruct US fundamentals from official filing acceptance times and preserve amendments/restatements.
-- Introduce macro-release vintages and historical benchmark/factor data.
+- ✅ Introduce macro-release vintages. Historical benchmark/factor data remains outstanding.
 - ✅ Leakage-safe walk-forward evaluation exists in `validation.py`: expanding folds, training rows purged when their outcome window overlaps the test period, an embargo of at least one horizon, and an automated future-information check that must return clean before anything is scored.
 
 #### Phase C — Create simple, interpretable challengers

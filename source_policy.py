@@ -135,10 +135,10 @@ SOURCE_AREAS = [
         "id": "macro",
         "name": "Rates, inflation and economy",
         "truth": "Original government agency and central-bank release with vintage date",
-        "current": "Not yet used in ratings",
-        "currentTier": None,
-        "target": "FRED/ALFRED metadata plus Treasury, BLS, BEA and central-bank releases",
-        "status": "planned",
+        "current": "Point-in-time FRED/ALFRED snapshots retaining Federal Reserve, BLS and BEA release vintages",
+        "currentTier": 1,
+        "target": "Validate regime-conditioned research over multiple cycles before allowing any capped model influence",
+        "status": "connected",
         "url": "https://fred.stlouisfed.org/docs/api/fred/overview.html",
     },
     {
@@ -190,6 +190,7 @@ def build_evidence_summary(
     identity: Dict[str, Any] | None = None,
     market: Dict[str, Any] | None = None,
     named_analysts: Dict[str, Any] | None = None,
+    macro: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Return a compact live summary used by the dashboard and rating gate."""
     values = data if isinstance(data, dict) else {}
@@ -216,8 +217,10 @@ def build_evidence_summary(
     named_key = bool(named_summary.get("keyConfigured"))
     named_ready = int(named_summary.get("ratingReady") or 0)
     named_total = int(named_summary.get("ratedSymbols") or 0)
+    macro_summary = macro if isinstance(macro, dict) else {}
+    macro_ready = bool(macro_summary.get("ready"))
 
-    authoritative_areas = int(filing_ready > 0) + int(portfolio_connected)
+    authoritative_areas = int(filing_ready > 0) + int(portfolio_connected) + int(macro_ready)
     total_areas = len(SOURCE_AREAS)
     return {
         "version": POLICY_VERSION,
@@ -248,6 +251,9 @@ def build_evidence_summary(
             "namedAnalystKeyConfigured": named_key,
             "namedAnalystReady": named_ready,
             "namedAnalystTotal": named_total,
+            "macroConfigured": bool(macro_summary.get("keyConfigured")),
+            "macroReady": macro_ready,
+            "macroStatus": macro_summary.get("status") or "unavailable",
         },
         "ratingGate": {
             "maximumConfidence": "Medium",
@@ -279,6 +285,7 @@ def evidence_policy(
     identity: Dict[str, Any] | None = None,
     market: Dict[str, Any] | None = None,
     named_analysts: Dict[str, Any] | None = None,
+    macro: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     areas = [dict(area) for area in SOURCE_AREAS]
     market_summary = market if isinstance(market, dict) else {}
@@ -303,8 +310,14 @@ def evidence_policy(
             area["currentTier"] = 2
             area["status"] = "connected"
             area["current"] = "Named analyst and firm actions, targets and accuracy records cross-checked against independent consensus"
+        if area["id"] == "macro" and isinstance(macro, dict):
+            area["status"] = "connected" if macro.get("ready") else macro.get("status") or "unavailable"
+            area["current"] = (
+                "Point-in-time FRED/ALFRED observations with original Federal Reserve, BLS and BEA vintages"
+                if macro.get("ready") else "Macro connector is present but missing or stale evidence remains disabled"
+            )
     return {
-        **build_evidence_summary(data, sarwa, identity, market, named_analysts),
+        **build_evidence_summary(data, sarwa, identity, market, named_analysts, macro),
         "principles": [
             "Facts outrank opinions; opinions outrank model guesses.",
             "Every critical value must retain source, period, unit, currency and retrieval time.",
