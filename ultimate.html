@@ -307,20 +307,23 @@
           <div><p class="eyebrow">Assumption stress test</p><h3 id="dcfTitle">What might the future cash be worth today?</h3></div>
           <span class="lab-status is-checking" id="dcfStatus">Building conservative ranges</span>
         </div>
-        <p class="panel-intro">A DCF estimates the cash owners may receive in future, then reduces distant cash because money later is worth less than money today. Kestrel now keeps the harsh reported view beside a bounded owner-cash sensitivity. Neither is a target price.</p>
+        <p class="panel-intro">A DCF estimates the cash owners may receive in future, then reduces distant cash because money later is worth less than money today. Kestrel keeps the harsh reported view and bounded owner-cash sensitivity unchanged, then opens a separate FCFE equity value only when the as-filed financing evidence is complete. None is a target price.</p>
         <div class="dcf-table" role="table" aria-label="Conservative discounted cash flow scenarios">
-          <div class="dcf-table-head" role="row"><span role="columnheader">Company</span><span role="columnheader">Market</span><span role="columnheader">All capex recurring</span><span role="columnheader">Downside</span><span role="columnheader">Owner-cash base</span><span role="columnheader">Strong</span><span role="columnheader">Maintenance → growth</span><span role="columnheader">Evidence</span></div>
+          <div class="dcf-table-head" role="row"><span role="columnheader">Company</span><span role="columnheader">Market</span><span role="columnheader">All capex recurring</span><span role="columnheader">Downside</span><span role="columnheader">Owner-cash base</span><span role="columnheader">Strong</span><span role="columnheader">FCFE equity</span><span role="columnheader">Maintenance → growth</span><span role="columnheader">Evidence</span></div>
           <div id="dcfRows"><p class="lab-loading">Waiting for cash-flow and market-risk evidence…</p></div>
         </div>
         <div class="dcf-assumptions">
           <div><strong>Reported floor</strong><span>Downside deducts every dollar of productive-asset spending, exactly as before.</span></div>
           <div><strong>Investment range</strong><span>Only spending above PP&amp;E depreciation can enter the growth sensitivity—and only with dated issuer evidence.</span></div>
           <div><strong>No false precision</strong><span>Base uses the midpoint of that possible-growth band; strong uses its upper edge. Depreciation is not called maintenance capex.</span></div>
+          <div><strong>Equity bridge</strong><span>FCFE adds normalized net borrowing. Positive borrowing gets no perpetual credit; cash, debt, leases and minority claims are checked but not subtracted again.</span></div>
           <div><strong>Valuation discipline</strong><span>Three annual observations, beta, 10.5% discount floor and the 80% terminal-value ceiling still apply.</span></div>
         </div>
         <p class="lab-method" id="dcfMethod">Five-year cash-flow forecast plus a perpetual-growth terminal value. Missing or negative cash flow produces no valuation.</p>
         <div class="dcf-sources">
           <a href="https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/free-cash-flow-valuation" target="_blank" rel="noopener noreferrer">CFA · cash-flow valuation</a>
+          <a href="https://pages.stern.nyu.edu/~adamodar/New_Home_Page/AppldCF/derivn/ch11deriv.html" target="_blank" rel="noopener noreferrer">Damodaran · FCFE and net borrowing</a>
+          <a href="https://pages.stern.nyu.edu/~adamodar/New_Home_Page/definitions.html" target="_blank" rel="noopener noreferrer">Damodaran · enterprise-to-equity claims</a>
           <a href="https://pages.stern.nyu.edu/~adamodar/podcasts/cfspr23/session12slides.pdf" target="_blank" rel="noopener noreferrer">Damodaran · growth vs maintenance</a>
           <a href="https://www.ifrs.org/issued-standards/list-of-standards/ias-16-property-plant-and-equipment/" target="_blank" rel="noopener noreferrer">IAS 16 · what depreciation measures</a>
           <a href="https://pages.stern.nyu.edu/~adamodar/New_Home_Page/project/prques.htm" target="_blank" rel="noopener noreferrer">Damodaran · terminal-growth discipline</a>

@@ -96,6 +96,59 @@ class ConservativeDcfTests(unittest.TestCase):
         self.assertEqual(result["currentFcfPerShare"], -5.0)
         self.assertEqual(result["selectedView"], "ownerCash")
 
+    def test_complete_financing_evidence_opens_fcfe_without_reapplying_balance_sheet_claims(self):
+        stock, market = history(multiplier=1.2)
+        rows = []
+        for index in range(6):
+            rows.append({
+                "knownOn": f"{2020 + index}-12-31", "operatingCashFlow": 180,
+                "capitalInvestment": 100, "depreciation": 70, "freeCashFlow": 80,
+                "netBorrowing": -5, "tradedShares": 10, "price": 100,
+                "financingEvidence": {"ready": True},
+            })
+        financing = {
+            "ready": True, "cash": {"value": 100}, "debt": {"value": 50},
+            "leases": {"value": 20}, "minorityInterests": {"value": 4},
+            "netBorrowing": {"value": -5}, "netDebtLikeClaims": -26,
+        }
+        record = {
+            "current": {
+                "knownOn": "2026-08-08", "operatingCashFlow": 180,
+                "capitalInvestment": 100, "depreciation": 70, "freeCashFlow": 80,
+                "tradedShares": 10, "price": 100, "financingEvidence": financing,
+            },
+            "history": rows,
+        }
+        result = build_company_dcf("AMZN", record, stock, market)
+        self.assertTrue(result["normalizedReady"])
+        self.assertTrue(result["equityReady"])
+        self.assertEqual(result["fcfeView"]["normalizedNetBorrowingPerShare"], -0.5)
+        self.assertFalse(result["fcfeView"]["balanceSheetClaimsAppliedToFcfe"])
+        owner_base = next(item for item in result["ownerCashView"]["scenarios"] if item["id"] == "base")
+        fcfe_base = next(item for item in result["fcfeView"]["scenarios"] if item["id"] == "base")
+        self.assertLess(fcfe_base["value"], owner_base["value"])
+
+    def test_positive_borrowing_is_visible_but_gets_no_perpetual_value_credit(self):
+        stock, market = history(multiplier=1.2)
+        rows = [{
+            "knownOn": f"{2020 + index}-12-31", "freeCashFlow": 80,
+            "netBorrowing": 30, "tradedShares": 10,
+            "financingEvidence": {"ready": True},
+        } for index in range(6)]
+        record = {
+            "current": {
+                "knownOn": "2026-08-08", "operatingCashFlow": 180,
+                "capitalInvestment": 100, "depreciation": 70, "freeCashFlow": 80,
+                "tradedShares": 10, "price": 100,
+                "financingEvidence": {"ready": True, "netBorrowing": {"value": 30}},
+            },
+            "history": rows,
+        }
+        result = build_company_dcf("AMZN", record, stock, market)
+        self.assertTrue(result["equityReady"])
+        self.assertEqual(result["fcfeView"]["normalizedNetBorrowingPerShare"], 0.0)
+        self.assertEqual(result["fcfeView"]["rangeLow"], result["ownerCashView"]["rangeLow"])
+
 
 if __name__ == "__main__":
     unittest.main()
