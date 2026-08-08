@@ -104,6 +104,15 @@ class PortfolioScienceTests(unittest.TestCase):
         self.assertFalse(gate["passed"])
         self.assertEqual(gate["detail"], "0 of 8 companies have dated issuer evidence and a depreciation cross-check")
 
+    def test_equity_valuation_has_separate_complete_financing_gate(self):
+        report = analyze_portfolio_science(histories(), iterations=100)
+        gate = next(item for item in report["gates"]["items"] if item["id"] == "equity_valuation")
+        self.assertFalse(gate["passed"])
+        self.assertEqual(
+            gate["detail"],
+            "0 of 8 companies have complete cash, debt, lease, minority-interest and net-borrowing evidence",
+        )
+
     def test_missing_history_fails_closed(self):
         available = histories()
 

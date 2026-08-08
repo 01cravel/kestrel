@@ -23,7 +23,7 @@ from point_in_time_valuation import point_in_time_valuation_snapshot
 from conservative_dcf import build_dcf_snapshot, official_treasury_10y
 
 
-MODEL_VERSION = "portfolio-science-v6"
+MODEL_VERSION = "portfolio-science-v7"
 DEFAULT_ITERATIONS = 20_000
 RANDOM_SEED = 20260808
 CACHE_SECONDS = 12 * 60 * 60
@@ -373,6 +373,10 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
         {"id": "investment_split", "name": "Maintenance versus growth investment evidence",
          "passed": bool(dcf.get("investmentEvidenceComplete")), "detail": (
              f'{dcf.get("investmentCompaniesReady", 0)} of {dcf.get("companiesTotal", 8)} companies have dated issuer evidence and a depreciation cross-check'
+         )},
+        {"id": "equity_valuation", "name": "Balance-sheet-vetted equity valuation",
+         "passed": bool(dcf.get("equityEvidenceComplete")), "detail": (
+             f'{dcf.get("equityCompaniesReady", 0)} of {dcf.get("companiesTotal", 8)} companies have complete cash, debt, lease, minority-interest and net-borrowing evidence'
          )},
         {"id": "walk_forward", "name": "Challenger wins unseen walk-forward periods",
          "passed": False},

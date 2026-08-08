@@ -3,11 +3,17 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from point_in_time_cashflow import build_company_cashflow, ttm_flow_as_of
+from point_in_time_cashflow import (
+    build_company_cashflow, financing_evidence_as_of, ttm_flow_as_of,
+)
 
 
 def flow(start, end, value, filed, form, accession):
     return {"start": start, "end": end, "val": value, "filed": filed, "form": form, "accn": accession}
+
+
+def instant(end, value, filed="2026-02-01", accession="a"):
+    return {"end": end, "val": value, "filed": filed, "form": "10-K", "accn": accession}
 
 
 class PointInTimeCashFlowTests(unittest.TestCase):
@@ -80,6 +86,43 @@ class PointInTimeCashFlowTests(unittest.TestCase):
         result = build_company_cashflow("AMZN", "0001", facts, [price], {}, today=date(2026, 2, 2))
         self.assertEqual(result["current"]["depreciation"], 35.0)
         self.assertEqual(result["depreciationTag"], "us-gaap:Depreciation")
+
+    def test_financing_evidence_is_as_filed_same_period_and_never_double_counts_claims(self):
+        annual = lambda value: [flow("2025-01-01", "2025-12-31", value, "2026-02-01", "10-K", "a")]
+        concepts = {
+            "CashAndCashEquivalentsAtCarryingValue": {"units": {"USD": [instant("2025-12-31", 100)]}},
+            "LongTermDebtCurrent": {"units": {"USD": [instant("2025-12-31", 10)]}},
+            "LongTermDebtNoncurrent": {"units": {"USD": [instant("2025-12-31", 40)]}},
+            "ShortTermBorrowings": {"units": {"USD": [instant("2025-12-31", 5)]}},
+            "OperatingLeaseLiabilityCurrent": {"units": {"USD": [instant("2025-12-31", 3)]}},
+            "OperatingLeaseLiabilityNoncurrent": {"units": {"USD": [instant("2025-12-31", 7)]}},
+            "FinanceLeaseLiabilityCurrent": {"units": {"USD": [instant("2025-12-31", 2)]}},
+            "FinanceLeaseLiabilityNoncurrent": {"units": {"USD": [instant("2025-12-31", 8)]}},
+            "MinorityInterest": {"units": {"USD": [instant("2025-12-31", 4)]}},
+            "ProceedsFromIssuanceOfDebt": {"units": {"USD": annual(30)}},
+            "RepaymentsOfDebt": {"units": {"USD": annual(12)}},
+        }
+        facts = {"facts": {"us-gaap": concepts}}
+        self.assertFalse(financing_evidence_as_of(facts, "USD", date(2026, 1, 31))["ready"])
+        result = financing_evidence_as_of(facts, "USD", date(2026, 2, 1))
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["debt"]["value"], 55.0)
+        self.assertEqual(result["leases"]["value"], 20.0)
+        self.assertEqual(result["netBorrowing"]["value"], 18.0)
+        self.assertEqual(result["netDebtLikeClaims"], -21.0)
+
+    def test_missing_lease_component_fails_closed_instead_of_assuming_zero(self):
+        facts = {"facts": {"us-gaap": {
+            "CashAndCashEquivalentsAtCarryingValue": {"units": {"USD": [instant("2025-12-31", 100)]}},
+            "LongTermDebtCurrent": {"units": {"USD": [instant("2025-12-31", 0)]}},
+            "LongTermDebtNoncurrent": {"units": {"USD": [instant("2025-12-31", 50)]}},
+            "ShortTermBorrowings": {"units": {"USD": [instant("2025-12-31", 0)]}},
+            "OperatingLeaseLiability": {"units": {"USD": [instant("2025-12-31", 10)]}},
+            "MinorityInterest": {"units": {"USD": [instant("2025-12-31", 0)]}},
+        }}}
+        result = financing_evidence_as_of(facts, "USD", date(2026, 2, 1))
+        self.assertFalse(result["balanceSheetReady"])
+        self.assertFalse(result["leases"]["ready"])
 
 
 if __name__ == "__main__":

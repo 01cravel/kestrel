@@ -287,7 +287,9 @@ function renderDcf(dcf = {}) {
     const record = companies[company.symbol] || {};
     const reported = record.reportedView || {};
     const ownerCash = record.ownerCashView || {};
+    const fcfe = record.fcfeView || {};
     const investment = record.investmentModel || {};
+    const financing = record.financingEvidence || {};
     const evidence = investment.evidence || {};
     const scenarios = Object.fromEntries((ownerCash.scenarios || []).map(item => [item.id, item]));
     const row = document.createElement('div');
@@ -319,6 +321,14 @@ function renderDcf(dcf = {}) {
       reportedCell.innerHTML = '<strong>—</strong><small>Reported cash not positive or history too short</small>';
     }
 
+    const fcfeCell = document.createElement('div');
+    if (record.equityReady && number(fcfe.rangeLow) !== null && number(fcfe.rangeHigh) !== null) {
+      const borrowing = number(fcfe.normalizedNetBorrowingPerShare);
+      fcfeCell.innerHTML = `<strong>$${Number(fcfe.rangeLow).toFixed(2)}–$${Number(fcfe.rangeHigh).toFixed(2)}</strong><small>${borrowing < 0 ? `$${Math.abs(borrowing).toFixed(2)}/share normalized repayment` : 'No perpetual credit for borrowing'}</small>`;
+    } else {
+      fcfeCell.innerHTML = `<strong>—</strong><small>${fcfe.message || 'Financing evidence incomplete'}</small>`;
+    }
+
     const splitCell = document.createElement('div');
     splitCell.className = 'dcf-driver';
     const maintenance = investment.maintenanceRange || [];
@@ -341,13 +351,35 @@ function renderDcf(dcf = {}) {
     } else {
       evidenceCell.innerHTML = `<strong>Missing</strong><small>${investment.message || 'No dated issuer evidence'}</small>`;
     }
-    row.append(companyCell, priceCell, reportedCell, scenarioCell('downside'), scenarioCell('base'), scenarioCell('strong'), splitCell, evidenceCell);
+    const financingDetail = document.createElement('small');
+    if (financing.ready) {
+      const cash = compactMoney.format(Number(financing.cash?.value || 0));
+      const debt = compactMoney.format(Number(financing.debt?.value || 0));
+      const leases = compactMoney.format(Number(financing.leases?.value || 0));
+      const minority = compactMoney.format(Number(financing.minorityInterests?.value || 0));
+      const borrowing = compactMoney.format(Number(financing.netBorrowing?.value || 0));
+      financingDetail.textContent = `Filed balance: cash ${cash} · debt ${debt} · leases ${leases} · outside equity ${minority}. TTM net borrowing ${borrowing}; claims are not deducted twice.`;
+    } else {
+      financingDetail.textContent = `Equity view closed · ${financing.message || 'complete same-period financing facts are missing'}`;
+    }
+    if (financing.sourceUrl) {
+      const financingLink = document.createElement('a');
+      financingLink.href = financing.sourceUrl;
+      financingLink.target = '_blank';
+      financingLink.rel = 'noopener noreferrer';
+      financingLink.textContent = financing.ready ? 'Complete · SEC financing facts' : 'Incomplete · SEC financing facts';
+      evidenceCell.append(financingLink, financingDetail);
+    } else {
+      evidenceCell.append(financingDetail);
+    }
+    row.append(companyCell, priceCell, reportedCell, scenarioCell('downside'), scenarioCell('base'), scenarioCell('strong'), fcfeCell, splitCell, evidenceCell);
     return row;
   });
   document.getElementById('dcfRows').replaceChildren(...rows);
   const normalized = Number(dcf.normalizedCompaniesReady || 0);
   const reported = Number(dcf.reportedCompaniesReady || 0);
-  setStatus(document.getElementById('dcfStatus'), `${normalized}/8 owner-cash · ${reported}/8 reported`, dcf.complete ? 'ready' : 'limited');
+  const equity = Number(dcf.equityCompaniesReady || 0);
+  setStatus(document.getElementById('dcfStatus'), `${equity}/8 FCFE · ${normalized}/8 owner-cash · ${reported}/8 reported`, dcf.complete && dcf.equityEvidenceComplete ? 'ready' : 'limited');
   const riskFree = dcf.riskFreeEvidence || {};
   const riskFreeText = number(riskFree.valuePct) !== null
     ? ` Risk-free anchor: ${Number(riskFree.valuePct).toFixed(2)}%${riskFree.date ? ` on ${riskFree.date}` : ' conservative floor'}.`
