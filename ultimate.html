@@ -292,6 +292,19 @@
           <div id="lookthroughRows"><p class="lab-loading">Reading issuer holdings…</p></div>
         </div>
         <p class="lab-method" id="lookthroughMethod">Only official issuer holdings can pass this check. Missing or stale data closes the gate.</p>
+        <div class="fund-holdings-explorer">
+          <div class="fund-explorer-heading">
+            <div><p class="eyebrow">Search every company</p><h4>What do the funds own underneath?</h4></div>
+            <span id="fundHoldingCount">Waiting for official holdings</span>
+          </div>
+          <label class="fund-search-label" for="fundHoldingSearch">Company name or ticker</label>
+          <input id="fundHoldingSearch" class="fund-search" type="search" placeholder="Try Planet Labs, ASTS, CME or GitLab" autocomplete="off">
+          <div class="fund-holding-table" role="table" aria-label="Every issuer-reported company position inside the portfolio funds">
+            <div class="fund-holding-head" role="row"><span role="columnheader">Company</span><span role="columnheader">Inside ETF</span><span role="columnheader">ETF weight</span><span role="columnheader">Your portfolio</span><span role="columnheader">Approx. value</span></div>
+            <div id="fundHoldingRows"><p class="lab-loading">Reading every issuer position…</p></div>
+          </div>
+          <p class="lab-method" id="fundHoldingMethod">Each ETF position stays separate unless Kestrel has a stable identity proving two records are the same security.</p>
+        </div>
       </section>
 
       <div class="science-foundation">

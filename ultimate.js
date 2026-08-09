@@ -62,6 +62,7 @@ const UPSIDE_SCENARIOS = [
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const compactMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
+const preciseMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const number = value => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -86,6 +87,8 @@ function loadCapital() {
 
 let capital = loadCapital();
 let portfolioSelection = null;
+let latestFundHoldings = [];
+let fundHoldingsComplete = false;
 
 function setStatus(element, text, state) {
   element.textContent = text;
@@ -177,6 +180,7 @@ function renderCapital() {
   renderUpsideScenarios();
   renderScenarios();
   if (portfolioSelection) renderPortfolioSelection(portfolioSelection);
+  if (latestFundHoldings.length) renderFundHoldings();
 }
 
 function saveCapital(nextCapital) {
@@ -561,6 +565,59 @@ function renderWalkForward(payload) {
     : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 2; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
 }
 
+function exposurePercent(value) {
+  const parsed = Number(value || 0);
+  const digits = parsed >= 0.01 ? 3 : parsed >= 0.001 ? 4 : 5;
+  return `${parsed.toFixed(digits)}%`;
+}
+
+function renderFundHoldings() {
+  const input = document.getElementById('fundHoldingSearch');
+  const query = String(input?.value || '').trim().toLowerCase();
+  const matches = query
+    ? latestFundHoldings.filter(item => `${item.symbol || ''} ${item.name || ''} ${item.fund || ''}`.toLowerCase().includes(query))
+    : latestFundHoldings;
+  const shown = matches.slice(0, query ? 50 : 15);
+  const rows = shown.map(item => {
+    const row = document.createElement('div');
+    row.className = 'fund-holding-row';
+    row.setAttribute('role', 'row');
+    const company = document.createElement('div');
+    company.className = 'fund-holding-company';
+    const name = document.createElement('strong');
+    name.textContent = item.name || item.symbol || 'Unnamed position';
+    const symbol = document.createElement('small');
+    symbol.textContent = `${item.symbol || 'No ticker'} · holdings dated ${item.asOf || 'unknown'}`;
+    company.append(name, symbol);
+    const fund = document.createElement('span');
+    fund.textContent = item.fund || '—';
+    const fundWeight = document.createElement('span');
+    fundWeight.textContent = exposurePercent(item.fundWeight);
+    const portfolioWeight = document.createElement('b');
+    portfolioWeight.textContent = exposurePercent(item.portfolioWeight);
+    const value = document.createElement('span');
+    value.textContent = preciseMoney.format(capital * Number(item.portfolioWeight || 0) / 100);
+    row.append(company, fund, fundWeight, portfolioWeight, value);
+    return row;
+  });
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'fund-holding-empty';
+    empty.textContent = latestFundHoldings.length
+      ? 'No verified fund company matches that search.'
+      : 'No complete issuer positions are available, so Kestrel will not estimate hidden exposure.';
+    rows.push(empty);
+  }
+  document.getElementById('fundHoldingRows').replaceChildren(...rows);
+  const count = document.getElementById('fundHoldingCount');
+  count.textContent = query
+    ? `${matches.length.toLocaleString()} matching position${matches.length === 1 ? '' : 's'} · showing ${shown.length}`
+    : `${latestFundHoldings.length.toLocaleString()} verified company positions · showing largest ${shown.length}`;
+  document.getElementById('fundHoldingMethod').textContent = fundHoldingsComplete
+    ? 'All six official issuer files passed freshness and reconciliation. Each ETF position stays separate unless a stable identity proves two records are the same security.'
+    : 'This is partial evidence from the issuer files that passed. Missing or stale funds are excluded, and Kestrel does not call the result total portfolio exposure.';
+}
+
 function renderLookthrough(payload) {
   const lookthrough = payload.lookthrough || {};
   const complete = lookthrough.complete === true;
@@ -592,6 +649,9 @@ function renderLookthrough(payload) {
     rows.push(empty);
   }
   document.getElementById('lookthroughRows').replaceChildren(...rows);
+  latestFundHoldings = Array.isArray(lookthrough.fundHoldings) ? lookthrough.fundHoldings : [];
+  fundHoldingsComplete = lookthrough.fundHoldingsComplete === true;
+  renderFundHoldings();
   const current = (lookthrough.sources || []).filter(source => source.ready);
   const oldest = current.reduce((value, source) => Math.max(value, Number(source.ageDays || 0)), 0);
   document.getElementById('lookthroughMethod').textContent = complete
@@ -711,6 +771,7 @@ capitalInput.addEventListener('change', event => {
   saveCapital(value !== null && value >= 1000 ? value : capital);
 });
 document.getElementById('resetCapital').addEventListener('click', () => saveCapital(DEFAULT_CAPITAL));
+document.getElementById('fundHoldingSearch').addEventListener('input', renderFundHoldings);
 
 function showPlanArea(view) {
   const allowed = new Set(['answer', 'portfolio', 'proof', 'risk', 'rules']);

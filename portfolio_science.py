@@ -26,7 +26,7 @@ from conservative_dcf import build_dcf_snapshot, official_treasury_10y
 from universe_ledger import PROTOCOL_VERSION as UNIVERSE_PROTOCOL_VERSION
 
 
-MODEL_VERSION = "portfolio-science-v8"
+MODEL_VERSION = "portfolio-science-v9"
 DEFAULT_ITERATIONS = 20_000
 RANDOM_SEED = 20260808
 CACHE_SECONDS = 12 * 60 * 60
@@ -763,7 +763,8 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
         "gates": {"passed": passed, "total": len(gates), "items": gates},
         "lookthrough": lookthrough or {
             "status": "not_supplied", "complete": False, "fundsReady": 0,
-            "fundsTotal": 6, "sources": [], "exposures": [],
+            "fundsTotal": 6, "sources": [], "exposures": [], "fundHoldings": [],
+            "fundHoldingsCount": 0, "fundHoldingsComplete": False,
         },
         "fundamentals": fundamentals or {
             "status": "not_supplied", "complete": False, "companiesReady": 0,

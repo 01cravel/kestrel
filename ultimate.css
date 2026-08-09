@@ -488,6 +488,25 @@
 .lookthrough-row.is-over { background: #f8e8e1; }
 .lookthrough-row.is-over b { color: var(--science-blocked); }
 
+.fund-holdings-explorer { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line-strong); }
+.fund-explorer-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.fund-explorer-heading h4 { margin: 4px 0 0; color: var(--blueprint-deep); font-size: 19px; }
+.fund-explorer-heading > span { color: var(--muted); font-family: var(--data); font-size: 9px; }
+.fund-search-label { display: block; margin-top: 18px; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.fund-search { width: 100%; margin-top: 7px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 2px; color: var(--blueprint-deep); background: var(--paper); font: 12px var(--body); outline: none; }
+.fund-search:focus { border-color: var(--factor); box-shadow: 0 0 0 3px rgba(74, 126, 159, .12); }
+.fund-holding-table { margin-top: 16px; border-top: 2px solid var(--factor); }
+.fund-holding-head,
+.fund-holding-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) 85px 95px 110px 100px; gap: 12px; align-items: center; }
+.fund-holding-head { padding: 10px 8px; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.fund-holding-row { min-height: 52px; padding: 9px 8px; border-top: 1px solid var(--line); }
+.fund-holding-company strong, .fund-holding-company small { display: block; }
+.fund-holding-company strong { color: var(--blueprint-deep); font-size: 11px; }
+.fund-holding-company small { margin-top: 3px; color: var(--muted); font-family: var(--data); font-size: 8px; }
+.fund-holding-row > span { color: var(--ink-soft); font-family: var(--data); font-size: 10px; }
+.fund-holding-row > b { color: var(--blueprint); font-family: var(--data); font-size: 11px; }
+.fund-holding-empty { margin: 0; padding: 20px 8px; color: var(--muted); font-size: 11px; }
+
 .science-table { margin-top: 22px; border-top: 2px solid var(--blueprint); }
 .science-table-head,
 .science-table-row {
@@ -1185,6 +1204,8 @@
   .science-table-head, .science-table-row { min-width: 650px; }
   .lookthrough-table { overflow-x: auto; }
   .lookthrough-head, .lookthrough-row { min-width: 560px; }
+  .fund-holding-table { overflow-x: auto; }
+  .fund-holding-head, .fund-holding-row { min-width: 650px; }
   .science-method-list li { grid-template-columns: 1fr; gap: 5px; }
   .lab-heading > p { margin-top: 16px; }
   .readiness-score { min-height: 220px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.16); }

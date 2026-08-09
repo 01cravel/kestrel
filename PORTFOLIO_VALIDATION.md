@@ -36,6 +36,17 @@ still pass the independent valuation, look-through, concentration, risk,
 turnover and five untouched-window gates below before human review; selection
 cannot weaken or substitute for any of them.
 
+Current look-through is not limited to companies already selected directly.
+Every non-cash company position from the six official issuer files is retained
+as a separately searchable ETF row with ticker, issuer name, ETF weight,
+portfolio weight, holdings date and approximate value at the user's chosen
+capital. Kestrel does not merge records across funds without a stable identity.
+For Vanguard, sub-basis-point positions use the issuer's exact market values
+divided by the complete stock-holdings market value because its displayed
+percentage rounds the smallest companies to zero. Missing, stale or
+unreconciled funds are excluded and the result is labelled partial; they are
+never silently treated as zero exposure.
+
 ## Frozen experiment
 
 Before any test period begins, record the model version, fixed instrument
