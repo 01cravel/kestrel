@@ -12,7 +12,7 @@ Kestrel’s job is not to collect the most data. It is to preserve the shortest 
 6. Kestrel must refuse a confident rating when a required gate fails.
 7. Company guidance remains an issuer claim, not a reported result. Preserve the exact published range; never manufacture a midpoint, silently translate currency, or compare unlike periods or definitions.
 8. Historical research uses only an immutable universe snapshot frozen before its outcome. A later ticker list, revised identity, changed ETF portfolio or disappeared company can never replace the original record.
-9. Automatic portfolio selection may read only that frozen snapshot. It records the snapshot, manifest, input-evidence and candidate hashes; incomplete membership, thin descriptors or filing conflicts produce no selection. The original portfolio remains a labelled comparison baseline and is never misrepresented as a newly generated answer.
+9. Automatic portfolio selection may read only that frozen snapshot. It records the snapshot, manifest, input-evidence and candidate hashes; incomplete membership, thin descriptors or filing conflicts produce no selection. Every direct company needs a versioned economic-theme classification and no selected theme may exceed 12%; missing classifications or an infeasible combination produce no selection. Candidate 1 remains immutable history, while Candidate 2 is labelled as a provisional judgement rather than a newly proven answer.
 
 ## Hierarchy
 

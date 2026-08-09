@@ -7,6 +7,7 @@ from portfolio_selection import COMPANY_WEIGHTS, candidate_from_latest, select_f
 
 
 def company(symbol: str, index: int) -> tuple[dict, dict]:
+    industries = ("Technology", "Financial Services", "Healthcare", "Energy")
     member = {
         "ticker": symbol,
         "security_id": f"FIGI:{symbol}",
@@ -18,7 +19,7 @@ def company(symbol: str, index: int) -> tuple[dict, dict]:
     payload = {
         "fetchedAt": 1786133100,
         "quote": {"c": 100 + index, "t": 1786132800},
-        "profile": {"name": f"Company {symbol}", "finnhubIndustry": "Technology"},
+        "profile": {"name": f"Company {symbol}", "finnhubIndustry": industries[index % len(industries)]},
         "metrics": {
             "peTTM": 12 + index,
             "pbQuarterly": 2 + index / 10,
@@ -105,6 +106,30 @@ class PortfolioSelectionTests(unittest.TestCase):
         result = select_frozen_candidate(frozen)
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["eligibleCount"], 7)
+
+    def test_economic_theme_cap_blocks_overlapping_top_ranked_companies(self):
+        frozen = snapshot(10)
+        for index, symbol in enumerate(("NVDA", "AMD", "AVGO")):
+            frozen["members"][index]["ticker"] = symbol
+            frozen["members"][index]["security_id"] = f"FIGI:{symbol}"
+            frozen["evidence"][index]["record_key"] = symbol
+            frozen["evidence"][index]["payload"]["profile"]["finnhubIndustry"] = "Semiconductors"
+        result = select_frozen_candidate(frozen)
+        self.assertEqual(result["status"], "selected")
+        self.assertLessEqual(result["themeWeights"].get("ai_capex", 0), 12)
+        self.assertLessEqual(sum(
+            row["weight"] for row in result["selected"] if row["theme"] == "ai_capex"
+        ), 12)
+
+    def test_unclassified_theme_fails_closed(self):
+        frozen = snapshot(8)
+        frozen["evidence"][0]["payload"]["profile"]["finnhubIndustry"] = ""
+        result = select_frozen_candidate(frozen)
+        self.assertEqual(result["status"], "blocked")
+        self.assertTrue(any(
+            row["symbol"] == "C00" and "unclassified" in row["reason"]
+            for row in result["excluded"]
+        ))
 
 
 if __name__ == "__main__":

@@ -16,7 +16,8 @@ import math
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
-SELECTION_VERSION = "frozen-universe-company-selection-v1"
+SELECTION_VERSION = "frozen-universe-company-selection-v2"
+THEME_POLICY_VERSION = "economic-theme-cap-v1"
 COMPANY_SLOTS = 8
 COMPANY_WEIGHTS = (6.0, 6.0, 5.0, 5.0, 5.0, 4.0, 4.0, 3.0)
 FOUNDATION_WEIGHTS = {
@@ -26,6 +27,35 @@ FOUNDATION_WEIGHTS = {
 OTHER_WEIGHTS = {"IBIT": 8.0, "SGOV": 2.0}
 NON_COMPANIES = {*FOUNDATION_WEIGHTS, *OTHER_WEIGHTS, "SPY", "VT", "GLD", "BTC", "GMOI"}
 MINIMUM_DESCRIPTORS = 6
+MAX_THEME_WEIGHT = 12.0
+AI_CAPEX_SYMBOLS = {
+    "NVDA", "AMD", "AVGO", "TSM", "ASML", "MRVL", "MU", "COHR", "CRDO",
+    "VRT", "ETN", "CEG", "GOOGL", "AMZN", "MSFT", "META", "DELL", "STX",
+    "NOW", "NBIS",
+}
+
+
+def _economic_theme(symbol: str, industry: str) -> Optional[str]:
+    if symbol in AI_CAPEX_SYMBOLS:
+        return "ai_capex"
+    text = industry.strip().lower()
+    if not text:
+        return None
+    groups = (
+        (("bank", "insurance", "financial", "payment"), "financial_services"),
+        (("health", "biotech", "pharma", "medical"), "healthcare"),
+        (("oil", "gas", "energy"), "energy"),
+        (("food", "beverage", "consumer", "retail", "household"), "consumer"),
+        (("industrial", "machinery", "construction", "transport"), "industrials"),
+        (("utility", "utilities"), "utilities"),
+        (("real estate", "reit"), "real_estate"),
+        (("material", "chemical", "mining"), "materials"),
+        (("technology", "software", "media", "telecom", "internet"), "technology"),
+    )
+    for needles, theme in groups:
+        if any(needle in text for needle in needles):
+            return theme
+    return text.replace(" ", "_")
 
 
 def _canonical(value: Any) -> str:
@@ -154,11 +184,17 @@ def select_frozen_candidate(frozen: Dict[str, Any]) -> Dict[str, Any]:
             exclusions.append({"symbol": symbol, "reason": f"only {coverage} of 8 required descriptors"})
             continue
         profile = payload.get("profile") or {}
+        industry = str(profile.get("finnhubIndustry") or "").strip()
+        theme = _economic_theme(symbol, industry)
+        if theme is None:
+            exclusions.append({"symbol": symbol, "reason": "economic theme is unclassified"})
+            continue
         eligible.append({
             "symbol": symbol,
             "securityId": member.get("security_id") or member.get("securityId"),
             "name": str(profile.get("name") or symbol),
-            "sector": str(profile.get("finnhubIndustry") or "Unclassified"),
+            "sector": industry,
+            "theme": theme,
             "price": price,
             "pe": pe if pe and pe > 0 else None,
             "book": book if book and book > 0 else None,
@@ -203,23 +239,42 @@ def select_frozen_candidate(frozen: Dict[str, Any]) -> Dict[str, Any]:
         })
 
     ranked = sorted(eligible, key=lambda row: (-row["score"], row["symbol"]))
-    selected = ranked[:COMPANY_SLOTS]
+    selected: List[Dict[str, Any]] = []
+    theme_weights: Dict[str, float] = {}
+    remaining = list(ranked)
+    for weight in COMPANY_WEIGHTS:
+        choice = next((row for row in remaining if (
+            theme_weights.get(row["theme"], 0.0) + weight <= MAX_THEME_WEIGHT
+        )), None)
+        if choice is None:
+            result = _blocked(
+                "The ranked universe cannot fill eight slots without breaching the 12% economic-theme ceiling.",
+                frozen,
+            )
+            result.update({"eligibleCount": len(eligible), "excluded": exclusions})
+            return result
+        selected.append(choice)
+        remaining.remove(choice)
+        theme_weights[choice["theme"]] = theme_weights.get(choice["theme"], 0.0) + weight
+
     for row, weight in zip(selected, COMPANY_WEIGHTS):
         row["weight"] = weight
         row["reason"] = (
             f"Ranked {row['score']:.1f}/100 across price, business quality and recent direction "
-            f"using {row['coverage']} of 8 frozen descriptors."
+            f"using {row['coverage']} of 8 frozen descriptors; its {row['theme'].replace('_', ' ')} "
+            f"theme remains inside the {MAX_THEME_WEIGHT:.0f}% ceiling."
         )
     weights = {**FOUNDATION_WEIGHTS, **{row["symbol"]: row["weight"] for row in selected}, **OTHER_WEIGHTS}
     selection_record = {
         "selectionVersion": SELECTION_VERSION,
+        "themePolicyVersion": THEME_POLICY_VERSION,
         "snapshotId": frozen.get("snapshotId"),
         "manifestHash": frozen.get("manifestHash"),
         "cutoffUtc": frozen.get("cutoffUtc"),
         "weights": weights,
         "selected": [{key: row.get(key) for key in (
             "symbol", "securityId", "name", "sector", "weight", "score", "valueScore",
-            "qualityScore", "momentumScore", "coverage", "evidenceHash", "reason",
+            "qualityScore", "momentumScore", "coverage", "theme", "evidenceHash", "reason",
         )} for row in selected],
     }
     return {
@@ -227,6 +282,8 @@ def select_frozen_candidate(frozen: Dict[str, Any]) -> Dict[str, Any]:
         **selection_record,
         "candidateHash": _digest(selection_record),
         "eligibleCount": len(eligible),
+        "themeWeights": theme_weights,
+        "maximumThemeWeight": MAX_THEME_WEIGHT,
         "excluded": exclusions,
         "promotionReady": False,
         "message": "A new research candidate was selected from frozen evidence; existing promotion gates still apply.",

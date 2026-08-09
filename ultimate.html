@@ -75,12 +75,12 @@
         </div>
         <span class="lab-status is-checking" id="universeSelectionStatus">Checking frozen evidence</span>
       </div>
-      <p class="selection-intro" id="universeSelectionSummary">Kestrel is looking for a verified market snapshot. Until one exists, the old portfolio remains a comparison baseline—not a freshly selected answer.</p>
+      <p class="selection-intro" id="universeSelectionSummary">Kestrel is looking for a verified market snapshot. Until one exists, Candidate 2 remains Kestrel’s best current judgement—not a proven or automatically approved answer.</p>
       <div class="selection-proof" id="universeSelectionProof" hidden></div>
       <div class="selected-company-grid" id="selectedCompanyGrid" aria-live="polite">
         <article class="selection-empty"><strong>No automatic candidate yet</strong><span>The selector will stop here if identities, prices, company facts or the frozen record are incomplete.</span></article>
       </div>
-      <p class="selection-rule"><strong>What stays fixed:</strong> the diversified fund foundation, 8% Bitcoin ceiling and 2% reserve. <strong>What can now change:</strong> the eight directly owned companies. Selection never bypasses valuation, portfolio-risk or five untouched-window approval.</p>
+      <p class="selection-rule"><strong>What stays fixed:</strong> the diversified fund foundation, 8% Bitcoin ceiling and 2% reserve. <strong>What can now change:</strong> the eight directly owned companies. Selection must respect the 12% economic-theme ceiling and never bypasses valuation, portfolio-risk or five untouched-window approval.</p>
     </section>
 
     <section class="capital-runway" aria-labelledby="runwayTitle" data-plan-panel="answer portfolio">
@@ -101,17 +101,25 @@
         <span><i class="key-reserve"></i>Reserve 2%</span>
         <span class="key-fact">35% allocated outside the US · 0 leverage</span>
       </div>
+      <div class="theme-map" aria-label="Direct company economic themes">
+        <strong>What actually drives the direct-company sleeve</strong>
+        <span>AI infrastructure <b>12%</b></span>
+        <span>Digital commerce <b>10%</b></span>
+        <span>Healthcare <b>8%</b></span>
+        <span>Energy <b>5%</b></span>
+        <span>Consumer essentials <b>3%</b></span>
+      </div>
     </section>
 
     <section class="allocation-section" aria-labelledby="allocationTitle" data-plan-panel="portfolio">
       <div class="allocation-heading">
-        <div><p class="eyebrow">Comparison baseline · selected by hand</p><h2 id="allocationTitle">The original portfolio is kept for honest comparison.</h2></div>
-        <p>These holdings are the unchanged Candidate 1 baseline. They are not presented as the latest automatic selection.</p>
+        <div><p class="eyebrow">Candidate 2 · current provisional judgement</p><h2 id="allocationTitle">A broader portfolio with a hard 12% AI-theme ceiling.</h2></div>
+        <p>Candidate 1 remains preserved in the audit history. Candidate 2 replaces four overlapping AI-capex bets with payments, healthcare, consumer essentials and energy.</p>
       </div>
 
       <button class="panel-reveal" type="button" data-reveal-panel="allocationDetails" aria-expanded="false">Show every holding, amount and reason</button>
       <div class="deep-panel" id="allocationDetails" hidden>
-      <div class="allocation-ledger" role="table" aria-label="Original candidate portfolio allocation">
+      <div class="allocation-ledger" role="table" aria-label="Candidate 2 portfolio allocation">
         <div class="ledger-header" role="row">
           <span role="columnheader">Holding</span><span role="columnheader">Allocation</span><span role="columnheader">Why it earns a place</span><span role="columnheader">What makes us reconsider</span>
         </div>
@@ -153,7 +161,7 @@
           <p role="cell">Capital projects can be delayed and the sleeve is sensitive to rates and the economic cycle.</p>
         </article>
 
-        <div class="ledger-group" role="row"><span role="cell">Direct company convictions</span><strong role="cell" data-group-weight="38">38% · $114,000</strong></div>
+        <div class="ledger-group" role="row"><span role="cell">Theme-capped direct companies</span><strong role="cell" data-group-weight="38">38% · $114,000</strong></div>
         <article class="ledger-row conviction-row" role="row">
           <div role="cell"><b>TSM</b><strong>Taiwan Semiconductor</strong><small>The world’s AI foundry</small></div>
           <div class="ledger-money" role="cell"><strong>$18,000</strong><span>6%</span></div>
@@ -167,16 +175,16 @@
           <p role="cell">Review if AI permanently damages Search economics or heavy spending fails to lift operating profit.</p>
         </article>
         <article class="ledger-row conviction-row" role="row">
-          <div role="cell"><b>AMZN</b><strong>Amazon</strong><small>Cloud, retail and advertising</small></div>
+          <div role="cell"><b>V</b><strong>Visa</strong><small>Global payments network</small></div>
           <div class="ledger-money" role="cell"><strong>$15,000</strong><span>5%</span></div>
-          <p role="cell">AWS is growing quickly while retail and advertising create two additional profit engines.</p>
-          <p role="cell">Review if AI spending fails to become cash flow or AWS growth materially loses ground.</p>
+          <p role="cell">Earns a fee across global digital commerce without taking the lending risk of a bank.</p>
+          <p role="cell">Review if payment volume, margins or market share weaken, or regulation materially changes its economics.</p>
         </article>
         <article class="ledger-row conviction-row" role="row">
-          <div role="cell"><b>ASML</b><strong>ASML</strong><small>Chipmaking bottleneck</small></div>
+          <div role="cell"><b>TTE</b><strong>TotalEnergies</strong><small>Integrated global energy</small></div>
           <div class="ledger-money" role="cell"><strong>$15,000</strong><span>5%</span></div>
-          <p role="cell">Its extreme-ultraviolet machines are essential to producing the most advanced chips at scale.</p>
-          <p role="cell">Review if export controls structurally shrink demand or a rival closes its technology lead.</p>
+          <p role="cell">Oil, gas, LNG and power create a cash-flow engine that does not depend on technology spending.</p>
+          <p role="cell">Review if production, balance-sheet strength or shareholder returns deteriorate through the commodity cycle.</p>
         </article>
         <article class="ledger-row conviction-row" role="row">
           <div role="cell"><b>MELI</b><strong>MercadoLibre</strong><small>Latin America’s digital platform</small></div>
@@ -185,10 +193,10 @@
           <p role="cell">Review if credit losses rise faster than revenue or commerce growth loses its structural edge.</p>
         </article>
         <article class="ledger-row conviction-row" role="row">
-          <div role="cell"><b>ETN</b><strong>Eaton</strong><small>Electricity infrastructure</small></div>
+          <div role="cell"><b>NVO</b><strong>Novo Nordisk</strong><small>Diabetes and obesity medicines</small></div>
           <div class="ledger-money" role="cell"><strong>$12,000</strong><span>4%</span></div>
-          <p role="cell">Data centres, grids and factories all need more electrical equipment; Eaton supplies the essentials.</p>
-          <p role="cell">Review if orders and backlog weaken for two quarters or margins fall despite continued demand.</p>
+          <p role="cell">Healthcare demand and drug innovation are economically different from AI investment and advertising.</p>
+          <p role="cell">This is a contrarian position: review if pricing, competition, sales guidance or the pipeline weakens further.</p>
         </article>
         <article class="ledger-row conviction-row" role="row">
           <div role="cell"><b>ISRG</b><strong>Intuitive Surgical</strong><small>Robotic surgery platform</small></div>
@@ -197,10 +205,10 @@
           <p role="cell">Review if procedure growth stalls, hospitals resist new systems or competition erodes usage.</p>
         </article>
         <article class="ledger-row conviction-row" role="row">
-          <div role="cell"><b>CEG</b><strong>Constellation Energy</strong><small>Always-on power for AI</small></div>
+          <div role="cell"><b>UL</b><strong>Unilever</strong><small>Everyday consumer essentials</small></div>
           <div class="ledger-money" role="cell"><strong>$9,000</strong><span>3%</span></div>
-          <p role="cell">Its nuclear and gas fleet can supply the round-the-clock electricity that data centres increasingly require.</p>
-          <p role="cell">Review if Calpine integration, debt, regulation or power prices damage the cash-flow case.</p>
+          <p role="cell">Food, personal-care and home-care brands add repeat demand when investment cycles slow.</p>
+          <p role="cell">Review if volumes, margins or brand share deteriorate, or management execution disappoints.</p>
         </article>
 
         <div class="ledger-group" role="row"><span role="cell">Capped asymmetric bet</span><strong role="cell" data-group-weight="8">8% · $24,000</strong></div>
@@ -225,11 +233,11 @@
       <div class="science-heading">
         <div>
           <p class="eyebrow">Evidence before allocation</p>
-          <h2 id="scienceTitle">Candidate 1 has to earn the right to change.</h2>
+          <h2 id="scienceTitle">Candidate 2 still has to prove it deserves real money.</h2>
         </div>
         <span class="lab-status is-checking" id="scienceStatus">Running scientific challenge</span>
       </div>
-      <p class="science-intro">The original portfolio above remains frozen as Candidate 1 so Kestrel cannot move the goalposts. Automatic selections are recorded separately and must later beat this baseline, after costs, in genuinely untouched periods.</p>
+      <p class="science-intro">Candidate 1 remains frozen in immutable history. Candidate 2 is the current corrective judgement, but an automatic challenger must still beat it after costs in genuinely untouched periods.</p>
 
       <div class="science-scoreboard" aria-label="Scientific portfolio audit status">
         <article><span>Past data available</span><strong id="scienceHistory">—</strong><small id="scienceHistoryDates">Checking all holdings</small></article>
@@ -296,8 +304,8 @@
           <ol class="science-method-list">
             <li><strong>Neutral first.</strong><span>Historical outperformance is shrunk 90% toward a common market expectation.</span></li>
             <li><strong>Unstable relationships reduced.</strong><span>Cross-asset covariance is shrunk 50% instead of trusting one sample completely.</span></li>
-            <li><strong>Hard limits stay hard.</strong><span>No direct company above 6%, true company exposure above 8%, Bitcoin above 8%, direct stocks above 40% or leverage at all.</span></li>
-            <li><strong>Simple rivals remain visible.</strong><span>The result is compared with Candidate 1 and global equity—not only weaker alternatives.</span></li>
+            <li><strong>Hard limits stay hard.</strong><span>No direct company above 6%, economic theme above 12%, true company exposure above 8%, Bitcoin above 8%, direct stocks above 40% or leverage at all.</span></li>
+            <li><strong>Simple rivals remain visible.</strong><span>The result is compared with Candidate 2 and global equity—not only weaker alternatives.</span></li>
             <li><strong>No silent promotion.</strong><span>Five sealed annual tests, positive uncertainty bounds, ETF look-through and point-in-time evidence must all pass first. Kestrel never places a trade.</span></li>
           </ol>
         </section>
@@ -309,7 +317,7 @@
       <div class="lab-heading">
         <div>
           <p class="eyebrow">The challenge layer</p>
-          <h2 id="labTitle">Is the original baseline ready for real money?</h2>
+          <h2 id="labTitle">Is Candidate 2 ready for real money?</h2>
         </div>
         <p>Kestrel now separates a good collection of businesses from a good portfolio bought at sensible prices. Missing evidence reduces confidence; it never becomes a positive signal.</p>
       </div>
@@ -433,25 +441,24 @@
         <li><strong>Enter in four equal stages.</strong><span>Invest 25% of each target now, then another 25% every two weeks. Finish in six weeks.</span></li>
         <li><strong>Check monthly; act quarterly.</strong><span>News is monitored daily, but allocations are reviewed on fixed quarterly dates.</span></li>
         <li><strong>Use evidence, not price alone.</strong><span>A fall is not a sell signal. Sell or replace when the stated business test breaks.</span></li>
-          <li><strong>Keep the hard ceilings.</strong><span>No direct company above 6%; true company exposure below 8%; direct stocks below 40%; Bitcoin at or below 8%; no leverage.</span></li>
+        <li><strong>Keep the hard ceilings.</strong><span>No direct company above 6%; no economic theme above 12%; true company exposure below 8%; direct stocks below 40%; Bitcoin at or below 8%; no leverage.</span></li>
         <li><strong>Rebalance meaningful drift.</strong><span>Return to target when a holding moves over three points, or 25% relative to its target.</span></li>
         <li><strong>Judge the whole portfolio.</strong><span>Compare after fees with VT, record maximum fall and every rule breach through 5 August 2028.</span></li>
       </ol>
     </section>
 
     <section class="evidence-foundation" aria-labelledby="evidenceTitle" data-plan-panel="rules">
-      <div><p class="eyebrow">Why the original names made the cut</p><h2 id="evidenceTitle">Evidence behind the comparison baseline</h2></div>
+      <div><p class="eyebrow">Why Candidate 2 made the cut</p><h2 id="evidenceTitle">Issuer evidence behind the current judgement</h2></div>
       <div class="evidence-links">
         <a href="https://investor.tsmc.com/english/quarterly-results/2026/q2" target="_blank" rel="noopener noreferrer"><strong>TSMC · current results</strong><span>Advanced manufacturing leadership, exceptional margins and rising AI demand across customers.</span></a>
-        <a href="https://ir.aboutamazon.com/news-release/news-release-details/2026/Amazon-com-Announces-Second-Quarter-Results/default.aspx" target="_blank" rel="noopener noreferrer"><strong>Amazon · current results</strong><span>AWS acceleration and operating-profit growth, balanced against unusually heavy AI investment.</span></a>
-        <a href="https://www.asml.com/en/investors/financial-results" target="_blank" rel="noopener noreferrer"><strong>ASML · financial results</strong><span>The critical lithography bottleneck behind leading-edge chip production.</span></a>
+        <a href="https://investor.visa.com/news/news-details/2026/Visa-Fiscal-Third-Quarter-2026-Financial-Results/default.aspx" target="_blank" rel="noopener noreferrer"><strong>Visa · current results</strong><span>Global payment volume and network economics without bank-style credit exposure.</span></a>
+        <a href="https://totalenergies.com/investors/results" target="_blank" rel="noopener noreferrer"><strong>TotalEnergies · financial results</strong><span>Energy cash flow, balance-sheet strength and shareholder returns outside the technology cycle.</span></a>
         <a href="https://investor.mercadolibre.com/sec-filings" target="_blank" rel="noopener noreferrer"><strong>MercadoLibre · filings</strong><span>Commerce and financial services compounding across large, under-digitised markets.</span></a>
-        <a href="https://www.eaton.com/us/en-us/company/news-insights/news-releases/2026/eaton-reports-record-first-quarter-2026-results.html" target="_blank" rel="noopener noreferrer"><strong>Eaton · current results</strong><span>Order, backlog and margin evidence behind the electrification thesis.</span></a>
+        <a href="https://www.novonordisk.com/investors/financial-results.html" target="_blank" rel="noopener noreferrer"><strong>Novo Nordisk · financial results</strong><span>Strong economics and healthcare diversification, balanced against current sales and competition risk.</span></a>
         <a href="https://isrg.intuitive.com/investors/" target="_blank" rel="noopener noreferrer"><strong>Intuitive · investor evidence</strong><span>Procedure growth, installed systems and recurring instrument economics.</span></a>
-        <a href="https://investors.constellationenergy.com/news-releases/news-release-details/constellation-reports-first-quarter-2026-results" target="_blank" rel="noopener noreferrer"><strong>Constellation · current results</strong><span>Always-on generation positioned for rising data-centre electricity demand.</span></a>
+        <a href="https://www.unilever.com/" target="_blank" rel="noopener noreferrer"><strong>Unilever · latest results</strong><span>Repeat consumer demand, brand strength and margins that diversify the direct-company sleeve.</span></a>
         <a href="https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/Data_Library/f-f_bench_factor.html" target="_blank" rel="noopener noreferrer"><strong>Diversification and factor evidence</strong><span>Long-history market, size and value evidence under the fund foundation.</span></a>
         <a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces" target="_blank" rel="noopener noreferrer"><strong>SEC · as-filed company facts</strong><span>Publication dates, periods and reported diluted earnings behind the point-in-time valuation record.</span></a>
-        <a href="https://data.ecb.europa.eu/data/datasets/EXR/EXR.D.USD.EUR.SP00.A" target="_blank" rel="noopener noreferrer"><strong>ECB · official exchange rates</strong><span>Daily euro-to-dollar reference rates used to translate ASML’s reported earnings without guessing.</span></a>
       </div>
       <p class="evidence-warning"><strong>Not a promise:</strong> these are research-led model weights, not personalised regulated advice. Price paid matters, so live valuation and results must be checked before any real order.</p>
     </section>

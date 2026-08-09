@@ -69,7 +69,9 @@ BASE_OPPORTUNITY_UNIVERSE = [
 
 ULTIMATE_PORTFOLIO_SYMBOLS = [
     "VTI", "AVUV", "VEA", "IEMG", "AVDV", "PAVE", "TSM", "GOOGL",
-    "AMZN", "ASML", "MELI", "ETN", "ISRG", "CEG", "IBIT", "SGOV",
+    "V", "TTE", "MELI", "NVO", "ISRG", "UL", "IBIT", "SGOV",
+    # Candidate 1 remains in the evidence universe for immutable comparison.
+    "AMZN", "ASML", "ETN", "CEG",
 ]
 
 BASE_ALL_SYMBOLS = list(dict.fromkeys(HOLDINGS_UNIVERSE + BASE_OPPORTUNITY_UNIVERSE))

@@ -6,39 +6,39 @@ const PORTFOLIO = [
   { symbol: 'VEA', weight: 7 }, { symbol: 'IEMG', weight: 7 },
   { symbol: 'AVDV', weight: 5 }, { symbol: 'PAVE', weight: 5 },
   { symbol: 'TSM', weight: 6 }, { symbol: 'GOOGL', weight: 6 },
-  { symbol: 'AMZN', weight: 5 }, { symbol: 'ASML', weight: 5 },
-  { symbol: 'MELI', weight: 5 }, { symbol: 'ETN', weight: 4 },
-  { symbol: 'ISRG', weight: 4 }, { symbol: 'CEG', weight: 3 },
+  { symbol: 'V', weight: 5 }, { symbol: 'TTE', weight: 5 },
+  { symbol: 'MELI', weight: 5 }, { symbol: 'NVO', weight: 4 },
+  { symbol: 'ISRG', weight: 4 }, { symbol: 'UL', weight: 3 },
   { symbol: 'IBIT', weight: 8 }, { symbol: 'SGOV', weight: 2 },
 ];
 
 const COMPANIES = [
   { symbol: 'TSM', name: 'TSMC' }, { symbol: 'GOOGL', name: 'Alphabet' },
-  { symbol: 'AMZN', name: 'Amazon' }, { symbol: 'ASML', name: 'ASML' },
-  { symbol: 'MELI', name: 'MercadoLibre' }, { symbol: 'ETN', name: 'Eaton' },
-  { symbol: 'ISRG', name: 'Intuitive Surgical' }, { symbol: 'CEG', name: 'Constellation' },
+  { symbol: 'V', name: 'Visa' }, { symbol: 'TTE', name: 'TotalEnergies' },
+  { symbol: 'MELI', name: 'MercadoLibre' }, { symbol: 'NVO', name: 'Novo Nordisk' },
+  { symbol: 'ISRG', name: 'Intuitive Surgical' }, { symbol: 'UL', name: 'Unilever' },
 ];
 
 const SCENARIOS = [
   {
     name: 'Severe global recession',
     description: 'Demand collapses, unemployment rises sharply and investors abandon risky assets.',
-    shocks: { VTI:-31, AVUV:-40, VEA:-32, IEMG:-36, AVDV:-40, PAVE:-35, TSM:-38, GOOGL:-32, AMZN:-35, ASML:-40, MELI:-45, ETN:-38, ISRG:-28, CEG:-25, IBIT:-50, SGOV:1 },
+    shocks: { VTI:-31, AVUV:-40, VEA:-32, IEMG:-36, AVDV:-40, PAVE:-35, TSM:-38, GOOGL:-32, V:-25, TTE:-30, MELI:-45, NVO:-20, ISRG:-28, UL:-15, IBIT:-50, SGOV:1 },
   },
   {
     name: 'AI spending disappointment',
     description: 'AI demand remains real, but customers delay spending and expected profits arrive much later.',
-    shocks: { VTI:-18, AVUV:-12, VEA:-14, IEMG:-22, AVDV:-14, PAVE:-24, TSM:-48, GOOGL:-30, AMZN:-28, ASML:-44, MELI:-16, ETN:-34, ISRG:-10, CEG:-30, IBIT:-28, SGOV:1 },
+    shocks: { VTI:-18, AVUV:-12, VEA:-14, IEMG:-22, AVDV:-14, PAVE:-24, TSM:-48, GOOGL:-30, V:-10, TTE:-5, MELI:-16, NVO:-8, ISRG:-10, UL:-5, IBIT:-28, SGOV:1 },
   },
   {
     name: 'Inflation and rates shock',
     description: 'Inflation returns, borrowing costs rise and investors pay less for distant future profits.',
-    shocks: { VTI:-25, AVUV:-24, VEA:-22, IEMG:-26, AVDV:-24, PAVE:-20, TSM:-27, GOOGL:-28, AMZN:-32, ASML:-30, MELI:-35, ETN:-22, ISRG:-32, CEG:-14, IBIT:-40, SGOV:0 },
+    shocks: { VTI:-25, AVUV:-24, VEA:-22, IEMG:-26, AVDV:-24, PAVE:-20, TSM:-27, GOOGL:-28, V:-20, TTE:5, MELI:-35, NVO:-18, ISRG:-32, UL:-12, IBIT:-40, SGOV:0 },
   },
   {
     name: 'Technology crash',
     description: 'The market abruptly reprices profitable technology companies as it did after previous bubbles.',
-    shocks: { VTI:-32, AVUV:-22, VEA:-21, IEMG:-34, AVDV:-22, PAVE:-28, TSM:-58, GOOGL:-48, AMZN:-48, ASML:-54, MELI:-43, ETN:-34, ISRG:-34, CEG:-27, IBIT:-55, SGOV:1 },
+    shocks: { VTI:-32, AVUV:-22, VEA:-21, IEMG:-34, AVDV:-22, PAVE:-28, TSM:-58, GOOGL:-48, V:-15, TTE:-10, MELI:-43, NVO:-12, ISRG:-34, UL:-8, IBIT:-55, SGOV:1 },
   },
 ];
 
@@ -51,12 +51,12 @@ const UPSIDE_SCENARIOS = [
   {
     name: 'Strong execution',
     annualReturn: 22,
-    description: 'AI, cloud, electrification and international growth all deliver better-than-normal progress.',
+    description: 'AI, payments, healthcare, energy and international growth all deliver better-than-normal progress.',
   },
   {
     name: 'Exceptional cycle',
     annualReturn: 35,
-    description: 'Several high-conviction themes succeed together and Bitcoin also contributes strongly.',
+    description: 'Several independent profit engines succeed together and Bitcoin also contributes strongly.',
   },
 ];
 
@@ -446,7 +446,7 @@ function sciencePercent(value) {
 
 function renderScienceComparison(payload) {
   const records = [
-    { name: 'Candidate 1 · frozen', metrics: payload.candidate?.metrics, className: '' },
+    { name: 'Candidate 2 · current judgement', metrics: payload.candidate?.metrics, className: '' },
     { name: 'Research challenger', metrics: payload.challenger?.metrics, className: 'is-research' },
     { name: 'VT · global benchmark', metrics: payload.benchmark, className: '' },
   ];
@@ -525,7 +525,7 @@ function renderWalkForward(payload) {
     : Number(metrics.informationRatioVsBenchmark).toFixed(2);
   const failures = result.failures || [];
   document.getElementById('walkForwardSummary').textContent = eligible
-    ? `The challenger beat Candidate 1 in ${result.candidateWins} windows and VT in ${result.benchmarkWins}, after declared costs.`
+    ? `The challenger beat Candidate 2 in ${result.candidateWins} windows and VT in ${result.benchmarkWins}, after declared costs.`
     : failures[0] || 'The challenger has not earned promotion on genuinely unseen evidence.';
 
   const rows = (result.windows || []).map(window => {
@@ -541,7 +541,7 @@ function renderWalkForward(payload) {
     const outcome = document.createElement('strong');
     outcome.textContent = sciencePercent(window.challengerNetReturn);
     const comparisons = document.createElement('p');
-    comparisons.textContent = `${sciencePercent(window.versusCandidate)} vs Candidate 1 · ${sciencePercent(window.versusBenchmark)} vs VT`;
+    comparisons.textContent = `${sciencePercent(window.versusCandidate)} vs Candidate 2 · ${sciencePercent(window.versusBenchmark)} vs VT`;
     const marker = document.createElement('b');
     marker.textContent = passed ? 'Won both' : 'Did not win both';
     row.append(period, outcome, comparisons, marker);
@@ -558,7 +558,7 @@ function renderWalkForward(payload) {
   const benchmark = result.uncertainty?.versusBenchmark || {};
   document.getElementById('walkForwardUncertainty').textContent = candidate.low === null || candidate.low === undefined
     ? 'A 95% uncertainty range needs at least five independent annual windows. Until then, the promotion gate stays closed.'
-    : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 1; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
+    : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 2; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
 }
 
 function renderLookthrough(payload) {
@@ -610,7 +610,7 @@ function renderPortfolioScience(payload) {
     : 'A complete common history is not available';
   document.getElementById('scienceAlternatives').textContent = new Intl.NumberFormat('en-US').format(research.portfoliosTested || 0);
   document.getElementById('scienceGates').textContent = `${gates.passed || 0} / ${gates.total || 0}`;
-  document.getElementById('scienceDecision').textContent = ready ? 'Eligible to challenge' : 'Keep Candidate 1';
+  document.getElementById('scienceDecision').textContent = ready ? 'Eligible to challenge' : 'Keep Candidate 2';
   document.getElementById('scienceDecisionNote').textContent = payload.message || 'No allocation changes while evidence is incomplete';
   renderScienceComparison(payload);
   renderScienceChanges(payload);
@@ -632,7 +632,7 @@ function renderPortfolioSelection(payload) {
     const reason = payload.reason || 'The latest frozen evidence cannot support a complete selection.';
     setStatus(status, 'Selection stopped safely', 'limited');
     topStatus.textContent = 'No new frozen selection yet';
-    summary.textContent = `${reason} Candidate 1 remains only a comparison baseline.`;
+    summary.textContent = `${reason} Candidate 2 remains Kestrel's best current judgement.`;
     proof.hidden = true;
     const empty = document.createElement('article');
     empty.className = 'selection-empty';
@@ -652,10 +652,10 @@ function renderPortfolioSelection(payload) {
   setStatus(status, 'New research candidate frozen', 'ready');
   topStatus.textContent = `Automatic selection · ${payload.cutoffUtc ? payload.cutoffUtc.slice(0, 10) : 'frozen snapshot'}`;
   summary.textContent = additions || removals
-    ? `The frozen evidence changed ${additions} compan${additions === 1 ? 'y' : 'ies'} and removed ${removals} from the original baseline. This is a research candidate, not an approved trade list.`
-    : 'The frozen evidence independently selected the same eight companies as the original baseline. It remains research-only until every approval gate passes.';
+    ? `The frozen evidence changed ${additions} compan${additions === 1 ? 'y' : 'ies'} and removed ${removals} from Candidate 2. This is a research candidate, not an approved trade list.`
+    : 'The frozen evidence independently selected the same eight companies as Candidate 2. It remains research-only until every approval gate passes.';
   proof.hidden = false;
-  proof.textContent = `Snapshot ${String(payload.snapshotId || '').slice(0, 12)}… · candidate ${String(payload.candidateHash || '').slice(0, 12)}… · ${payload.eligibleCount || 0} eligible companies · method ${payload.selectionVersion || 'unknown'}`;
+  proof.textContent = `Snapshot ${String(payload.snapshotId || '').slice(0, 12)}… · candidate ${String(payload.candidateHash || '').slice(0, 12)}… · ${payload.eligibleCount || 0} eligible companies · maximum economic theme ${Number(payload.maximumThemeWeight || 12).toFixed(0)}% · method ${payload.selectionVersion || 'unknown'}`;
   const cards = selected.map((item, index) => {
     const card = document.createElement('article');
     card.className = 'selected-company';
@@ -692,7 +692,7 @@ async function loadPortfolioScience() {
     renderPortfolioScience(await response.json());
   } catch (error) {
     setStatus(document.getElementById('scienceStatus'), 'Audit unavailable · no changes', 'limited');
-    document.getElementById('scienceDecision').textContent = 'Keep Candidate 1';
+    document.getElementById('scienceDecision').textContent = 'Keep Candidate 2';
     document.getElementById('scienceDecisionNote').textContent = 'Kestrel could not complete the evidence checks, so it made no allocation changes.';
     renderWalkForward({});
     renderLookthrough({});
