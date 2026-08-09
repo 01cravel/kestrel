@@ -7,7 +7,8 @@ import unittest
 
 from portfolio_science import (
     BENCHMARK_SYMBOL, BOUNDS, CANDIDATE_WEIGHTS, SYMBOLS,
-    MODEL_VERSION, analyze_portfolio_science, portfolio_science_snapshot, walk_forward_evaluation,
+    MODEL_VERSION, THEME_CAPS, THEME_GROUPS, analyze_portfolio_science,
+    portfolio_science_snapshot, walk_forward_evaluation,
 )
 from price_history import _downsample
 from universe_ledger import PROTOCOL_VERSION as UNIVERSE_PROTOCOL_VERSION
@@ -90,7 +91,7 @@ class PortfolioScienceTests(unittest.TestCase):
     def complete_lookthrough(self):
         return {
             "complete": True, "fundsReady": 6, "fundsTotal": 6,
-            "fundOverlaps": {"VTI": {"GOOGL": 5.5, "AMZN": 3.5}},
+            "fundOverlaps": {"VTI": {"GOOGL": 5.5, "V": 0.2}},
             "sources": [], "exposures": [],
         }
 
@@ -114,6 +115,12 @@ class PortfolioScienceTests(unittest.TestCase):
             self.assertLessEqual(weight, BOUNDS[symbol][1] + 0.01)
         self.assertFalse(report["challenger"]["promotionReady"])
         self.assertEqual(report["status"], "research_only")
+        for theme, cap in THEME_CAPS.items():
+            exposure = sum(
+                weights.get(symbol, 0) for symbol, assigned in THEME_GROUPS.items()
+                if assigned == theme
+            )
+            self.assertLessEqual(exposure, cap + 0.01)
 
     def test_search_is_deterministic_and_reports_two_year_risk(self):
         first = analyze_portfolio_science(histories(), iterations=300)
@@ -160,13 +167,13 @@ class PortfolioScienceTests(unittest.TestCase):
         available = histories()
 
         def provider(symbol):
-            if symbol == "ASML":
+            if symbol == "NVO":
                 raise RuntimeError("missing")
             return available[symbol]
 
         report = portfolio_science_snapshot(provider=provider, iterations=100)
         self.assertEqual(report["status"], "data_incomplete")
-        self.assertIn("ASML", report["errors"])
+        self.assertIn("NVO", report["errors"])
         self.assertFalse(report["challenger"]["promotionReady"])
 
     def test_walk_forward_refuses_current_ticker_history_without_provenance(self):

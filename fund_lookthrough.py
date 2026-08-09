@@ -1,4 +1,4 @@
-"""Official, fail-closed ETF holdings look-through for Candidate 1.
+"""Official, fail-closed ETF holdings look-through for Candidate 2.
 
 The calculation deliberately uses issuer-published holdings only.  If an
 issuer feed disappears, is stale, or cannot be parsed, the affected fund is
@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 
 
 EQUITY_FUNDS = ("VTI", "AVUV", "VEA", "IEMG", "AVDV", "PAVE")
+LOOKTHROUGH_VERSION = "fund-lookthrough-v2"
 MAX_AGE_DAYS = 75
 CACHE_SECONDS = 24 * 60 * 60
 
@@ -35,13 +36,18 @@ FUND_SOURCES = {
 DIRECT_COMPANIES = {
     "TSM": {"tickers": {"TSM", "2330"}, "names": ("TAIWAN SEMICONDUCTOR",)},
     "GOOGL": {"tickers": {"GOOGL", "GOOG"}, "names": ("ALPHABET INC",)},
-    "AMZN": {"tickers": {"AMZN"}, "names": ("AMAZON.COM", "AMAZON COM")},
-    "ASML": {"tickers": {"ASML", "ASML NA"}, "names": ("ASML HOLDING",)},
+    "V": {"tickers": {"V"}, "names": ("VISA INC",)},
+    "TTE": {"tickers": {"TTE", "TTE FP"}, "names": ("TOTALENERGIES",)},
     "MELI": {"tickers": {"MELI"}, "names": ("MERCADOLIBRE",)},
-    "ETN": {"tickers": {"ETN"}, "names": ("EATON CORP",)},
+    "NVO": {"tickers": {"NVO", "NOVO B"}, "names": ("NOVO NORDISK",)},
     "ISRG": {"tickers": {"ISRG"}, "names": ("INTUITIVE SURGICAL",)},
-    "CEG": {"tickers": {"CEG"}, "names": ("CONSTELLATION ENERGY",)},
+    "UL": {"tickers": {"UL", "ULVR", "UNA"}, "names": ("UNILEVER",)},
 }
+
+NON_COMPANY_TERMS = (
+    "CASH", "CURRENCY", "FUTURE", "FORWARD", "SWAP", "TREASURY BILL",
+    "MONEY MARKET", "RECEIVABLE", "PAYABLE", "COLLATERAL",
+)
 
 _LOCK = threading.Lock()
 _CACHE: Optional[Dict[str, Any]] = None
@@ -78,11 +84,23 @@ def _holding(ticker: Any, name: Any, weight: Any) -> Optional[Dict[str, Any]]:
 def _parse_vanguard(text: str) -> Dict[str, Any]:
     payload = json.loads(text)
     rows = payload.get("fund", {}).get("entity") or []
-    holdings = [
-        item for row in rows
-        if (item := _holding(row.get("ticker"), row.get("longName"), row.get("percentWeight")))
-    ]
-    return {"asOf": str(payload.get("asOfDate") or "")[:10], "holdings": holdings}
+    market_total = sum(float(row.get("marketValue") or 0) for row in rows)
+    holdings = []
+    for row in rows:
+        market_value = _weight(row.get("marketValue"))
+        derived_weight = (
+            market_value / market_total * 100
+            if market_value is not None and market_total > 0
+            else row.get("percentWeight")
+        )
+        item = _holding(row.get("ticker"), row.get("longName"), derived_weight)
+        if item:
+            holdings.append(item)
+    return {
+        "asOf": str(payload.get("asOfDate") or "")[:10],
+        "holdings": holdings,
+        "weightMethod": "issuer market value divided by the complete stock-holdings market value",
+    }
 
 
 def _parse_avantis(text: str) -> Dict[str, Any]:
@@ -161,6 +179,15 @@ def _canonical_company(holding: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _is_named_company(holding: Dict[str, Any]) -> bool:
+    ticker = str(holding.get("ticker") or "").strip().upper()
+    name = str(holding.get("name") or "").strip()
+    upper_name = name.upper()
+    if not name or ticker in {"CASH", "USD", "EUR", "GBP", "JPY", "-"}:
+        return False
+    return not any(term in upper_name for term in NON_COMPANY_TERMS)
+
+
 def calculate_lookthrough(weights: Dict[str, float], funds: Dict[str, Dict[str, Any]],
                           today: Optional[date] = None) -> Dict[str, Any]:
     current_date = today or date.today()
@@ -168,6 +195,7 @@ def calculate_lookthrough(weights: Dict[str, float], funds: Dict[str, Dict[str, 
     hidden = {symbol: 0.0 for symbol in DIRECT_COMPANIES}
     fund_overlaps = {fund: {symbol: 0.0 for symbol in DIRECT_COMPANIES} for fund in EQUITY_FUNDS}
     source_rows = []
+    named_holdings: List[Dict[str, Any]] = []
     for fund in EQUITY_FUNDS:
         record = funds.get(fund) or {}
         holdings = record.get("holdings") or []
@@ -182,14 +210,24 @@ def calculate_lookthrough(weights: Dict[str, float], funds: Dict[str, Dict[str, 
             "symbol": fund, "asOf": as_of or None, "ageDays": age,
             "holdings": len(holdings), "reportedWeight": round(total_weight, 2),
             "ready": ready, "source": FUND_SOURCES[fund], "error": record.get("error"),
+            "weightMethod": record.get("weightMethod") or "issuer-reported position weight",
         })
         if not ready:
             continue
         fund_weight = float(weights.get(fund, 0))
         for holding in holdings:
+            holding_weight = float(holding.get("weight") or 0)
+            if fund_weight > 0 and holding_weight > 0 and _is_named_company(holding):
+                named_holdings.append({
+                    "symbol": str(holding.get("ticker") or "").strip().upper() or None,
+                    "name": str(holding.get("name") or "").strip(),
+                    "fund": fund,
+                    "fundWeight": round(holding_weight, 8),
+                    "portfolioWeight": round(fund_weight * holding_weight / 100, 8),
+                    "asOf": as_of,
+                })
             symbol = _canonical_company(holding)
             if symbol:
-                holding_weight = float(holding["weight"])
                 hidden[symbol] += fund_weight * holding_weight / 100
                 fund_overlaps[fund][symbol] += holding_weight
 
@@ -200,7 +238,11 @@ def calculate_lookthrough(weights: Dict[str, float], funds: Dict[str, Dict[str, 
         "effective": round(direct[symbol] + hidden[symbol], 2),
     } for symbol in DIRECT_COMPANIES), key=lambda item: item["effective"], reverse=True)
     ready_count = sum(bool(item["ready"]) for item in source_rows)
+    named_holdings.sort(key=lambda item: (
+        -float(item["portfolioWeight"]), item["fund"], item.get("symbol") or "", item["name"]
+    ))
     return {
+        "lookthroughVersion": LOOKTHROUGH_VERSION,
         "status": "complete" if ready_count == len(EQUITY_FUNDS) else "incomplete",
         "complete": ready_count == len(EQUITY_FUNDS),
         "fundsReady": ready_count,
@@ -208,11 +250,18 @@ def calculate_lookthrough(weights: Dict[str, float], funds: Dict[str, Dict[str, 
         "maxAgeDays": MAX_AGE_DAYS,
         "sources": source_rows,
         "exposures": exposures,
+        "fundHoldings": named_holdings,
+        "fundHoldingsCount": len(named_holdings),
+        "fundHoldingsComplete": ready_count == len(EQUITY_FUNDS),
         "fundOverlaps": {
             fund: {symbol: round(value, 4) for symbol, value in overlaps.items() if value > 0}
             for fund, overlaps in fund_overlaps.items()
         },
-        "note": "Effective exposure adds direct shares to the same company held inside the six equity ETFs.",
+        "note": (
+            "Effective exposure adds direct shares to the same company held inside the six equity ETFs. "
+            "The searchable fund ledger keeps each issuer-reported company position separate by ETF; it never "
+            "merges similarly named securities without a stable cross-fund identity."
+        ),
     }
 
 

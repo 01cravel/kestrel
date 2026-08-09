@@ -2,6 +2,7 @@
 .kestrel-market-cache.tmp
 .kestrel-history-cache.json
 .kestrel-history-cache.tmp
+.kestrel-investor-history.json
 .kestrel-signal-history.json
 .kestrel-signal-history.tmp
 .kestrel-portfolio.json

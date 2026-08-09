@@ -32,6 +32,7 @@ from market_integrity import DATABENTO_API_KEY, market_integrity_snapshot, refre
 from market_history import MarketHistoryStore
 from macro_regime import macro_regime_snapshot
 from mover_autopsy import mover_snapshot
+from portfolio_selection import candidate_from_latest
 from portfolio_science import (
     CANDIDATE_WEIGHTS, MODEL_VERSION as PORTFOLIO_MODEL_VERSION, portfolio_science_snapshot,
 )
@@ -68,7 +69,9 @@ BASE_OPPORTUNITY_UNIVERSE = [
 
 ULTIMATE_PORTFOLIO_SYMBOLS = [
     "VTI", "AVUV", "VEA", "IEMG", "AVDV", "PAVE", "TSM", "GOOGL",
-    "AMZN", "ASML", "MELI", "ETN", "ISRG", "CEG", "IBIT", "SGOV",
+    "V", "TTE", "MELI", "NVO", "ISRG", "UL", "IBIT", "SGOV",
+    # Candidate 1 remains in the evidence universe for immutable comparison.
+    "AMZN", "ASML", "ETN", "CEG",
 ]
 
 BASE_ALL_SYMBOLS = list(dict.fromkeys(HOLDINGS_UNIVERSE + BASE_OPPORTUNITY_UNIVERSE))
@@ -194,7 +197,9 @@ def opportunity_universe() -> List[str]:
 
 
 def all_symbols() -> List[str]:
-    return list(dict.fromkeys(HOLDINGS_UNIVERSE + opportunity_universe()))
+    return list(dict.fromkeys(
+        HOLDINGS_UNIVERSE + opportunity_universe() + ULTIMATE_PORTFOLIO_SYMBOLS
+    ))
 
 
 def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
@@ -217,6 +222,8 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
         data = dict(STATE["data"])
     if state_status not in {"ready", "cached"}:
         return {"status": "waiting", "message": "Market and filing evidence is still refreshing."}
+    # Freeze every name the portfolio may own, compare or select. Later
+    # selection is restricted to this retained information set.
     symbols = all_symbols()
     identities = security_master_snapshot(symbols)
     if identities.get("status") not in {"ready", "cached", "partial"}:
@@ -244,7 +251,7 @@ def freeze_daily_universe(now: datetime | None = None) -> Dict[str, Any]:
         })
     try:
         certification = MARKET_HISTORY_STORE.certify_session(
-            decision_date, list(dict.fromkeys(ULTIMATE_PORTFOLIO_SYMBOLS + ["VT"])), cutoff
+            decision_date, list(dict.fromkeys(symbols + ["VT"])), cutoff
         )
     except sqlite3.Error:
         # A missing or damaged optional archive can never open certification,
@@ -566,7 +573,7 @@ def full_refresh(only_missing: bool = False) -> None:
     if not FINNHUB_KEY:
         with STATE_LOCK:
             STATE["status"] = "error"
-            STATE["message"] = "A Finnhub API key is required"
+            STATE["message"] = "Live market data is not connected on this computer"
         return
 
     symbols = all_symbols()
@@ -733,6 +740,9 @@ class KestrelHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/universe-ledger":
             self.send_json(UNIVERSE_LEDGER.latest())
+            return
+        if parsed.path == "/api/portfolio-selection":
+            self.send_json(candidate_from_latest(UNIVERSE_LEDGER.latest()))
             return
         if parsed.path == "/api/dashboard":
             opportunities = opportunity_universe()

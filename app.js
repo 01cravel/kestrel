@@ -1937,12 +1937,14 @@ function capConfidence(confidence) {
 function renderEvidencePolicy(policy) {
   if (!policy || !els.evidenceSection) return;
   els.evidenceSection.dataset.status = policy.status || 'guarded';
-  els.evidenceTitle.textContent = policy.title || 'Evidence standard unavailable';
-  els.evidenceSummary.textContent = policy.summary || 'Kestrel cannot verify the source hierarchy yet.';
+  els.evidenceTitle.textContent = policy.status === 'ready'
+    ? 'Today’s ratings have all required evidence'
+    : 'Some evidence is still missing, so confidence is limited';
+  els.evidenceSummary.textContent = policy.summary || 'Kestrel cannot confirm which sources support today’s ratings yet.';
   els.evidenceAuthority.textContent = `${policy.authoritativeAreas || 0} of ${policy.totalAreas || 0}`;
   els.evidenceCap.textContent = policy.ratingGate?.maximumConfidence || 'Low';
   els.evidenceUltra.textContent = policy.ratingGate?.ultraBuyEnabled ? 'Enabled' : 'Locked';
-  els.evidenceNext.textContent = policy.nextUpgrade || 'Connect the next authoritative source.';
+  els.evidenceNext.textContent = policy.nextUpgrade || 'Connect the next official or independently checked source.';
 }
 
 function ensureBenchmarkPerformance(ownedSymbols) {
@@ -2351,8 +2353,12 @@ function renderBrief(dashboard, ownedSymbols, assessments) {
     return;
   }
   if (dashboard.status !== 'ready') {
-    els.briefTitle.textContent = 'Checking your holdings before looking for new ideas.';
-    els.briefDetail.textContent = `${assessedOwned.length} of ${ownedSymbols.length} owned positions have enough evidence for an early view.`;
+    els.briefTitle.textContent = dashboard.keyConfigured
+      ? 'Checking what you own before showing any ideas.'
+      : 'Live market data is not connected here yet.';
+    els.briefDetail.textContent = dashboard.keyConfigured
+      ? `${assessedOwned.length} of ${ownedSymbols.length} holdings have enough information for an early view.`
+      : 'Your saved holdings are untouched, but Kestrel will not give today’s ratings until it can check current prices and company information.';
     return;
   }
   if (sells.length) {
@@ -2373,7 +2379,7 @@ function renderHoldings(symbols, assessments, hasOwnedPositions) {
     els.holdingsList.innerHTML = `
       <div class="empty-card">
         <strong>Your holdings are not set up on this address</strong>
-        <span>Choose “Edit holdings” and enter your share counts. Kestrel will keep them in this browser.</span>
+        <span>Choose “Update what I own” and enter your share counts. Kestrel will keep them in this browser.</span>
       </div>`;
     return;
   }
@@ -2397,7 +2403,7 @@ function renderHoldings(symbols, assessments, hasOwnedPositions) {
 
   els.holdingsList.innerHTML = `
     <div class="league-header" aria-hidden="true">
-      <span>Decision rank</span><span>Decision and company</span><span>Analysts</span><span>Value</span><span>Quality</span><span>Results</span><span>Trend</span><span>Position / weight</span>
+      <span>Overall rank</span><span>Kestrel’s view</span><span>Expert opinions</span><span>Price</span><span>Business</span><span>Recent results</span><span>Direction</span><span>Your holding</span>
     </div>
     ${renderGeographyAudit()}
     ${sorted.map(renderHoldingRow).join('')}`;
@@ -2411,9 +2417,9 @@ function renderGeographyAudit() {
   if (!audit) return '';
   const best = audit.bestUs;
   const bestText = best?.researchRank
-    ? `Best US challenger: ${best.instrument.name} at ${best.researchRank.score}/100${best.researchRank.score >= 70 ? best.confidence === 'Low' ? ' · score passes; confidence does not' : ' · passes the option gate' : ' · below the 70-point option gate'}`
+    ? `Best US alternative checked: ${best.instrument.name} at ${best.researchRank.score}/100${best.researchRank.score >= 70 ? best.confidence === 'Low' ? ' · looks promising, but the evidence is too weak' : ' · strong enough to compare with what you own' : ' · not strong enough to suggest'}`
     : 'No US challenger has enough evidence to rank yet';
-  return `<div class="league-audit"><strong>Country-neutral check</strong><span>${audit.usChecked} US and ${audit.internationalChecked} international candidates assessed on identical rules.</span><em>${escapeHtml(bestText)}</em></div>`;
+  return `<div class="league-audit"><strong>Same test everywhere</strong><span>${audit.usChecked} US and ${audit.internationalChecked} international companies checked using the same rules.</span><em>${escapeHtml(bestText)}</em></div>`;
 }
 
 function leagueScore(value) {
@@ -2467,8 +2473,8 @@ function renderHoldingRow(assessment) {
       <div class="league-rank-cell">
         <span class="holding-rank">${isLeagueOption ? 'OPTION' : researchRank ? `#${assessment.holdingRank}` : '—'}</span>
         <strong>${leagueScore(researchRank?.decisionScore)}</strong>
-        <small>${researchRank ? 'Decision score' : 'Not comparable'}</small>
-        <em>${researchRank ? `Research ${leagueScore(researchRank.score)} · #${researchRank.universePosition}/${researchRank.universeSize}` : 'Not a company'}</em>
+        <small>${researchRank ? 'Overall score' : 'Not comparable'}</small>
+        <em>${researchRank ? `Company facts ${leagueScore(researchRank.score)} · #${researchRank.universePosition}/${researchRank.universeSize} checked` : 'Not a company'}</em>
       </div>
       <div class="company-cell">
         ${isLeagueOption ? `<div class="missing-ribbon">${isWatchOption ? 'US watch · confidence low' : 'You do not own this'}</div>` : ''}
@@ -2480,24 +2486,24 @@ function renderHoldingRow(assessment) {
           <span>What it does</span>
           <p>${escapeHtml(guide.business)}</p>
         </div>
-        ${assessment.investorIdea ? `<span class="filing-signal">Investor conviction ${leagueScore(researchRank?.investorConviction)} · ${assessment.investorIdea.activeBuyerCount || 0} buying manager${assessment.investorIdea.activeBuyerCount === 1 ? '' : 's'} · ${assessment.investorIdea.ownerCount || 0} owner${assessment.investorIdea.ownerCount === 1 ? '' : 's'}</span>` : ''}
-        <button type="button" data-detail-symbol="${escapeHtml(symbol)}" data-league-option="${isLeagueOption ? 'true' : 'false'}">Full evidence</button>
+        ${assessment.investorIdea ? `<span class="filing-signal">Experienced-investor interest ${leagueScore(researchRank?.investorConviction)} · ${assessment.investorIdea.activeBuyerCount || 0} recently bought · ${assessment.investorIdea.ownerCount || 0} disclosed owning it</span>` : ''}
+        <button type="button" data-detail-symbol="${escapeHtml(symbol)}" data-league-option="${isLeagueOption ? 'true' : 'false'}">Explain this view</button>
       </div>
       <div class="league-metric analyst-cell">
-        <span>Analyst agreement</span>
+        <span>Positive expert views</span>
         <strong>${plainPercent(analystPositive, 0)}</strong>
         <small>${escapeHtml(analystVotes)}</small>
         <em>${escapeHtml(analystBreakdown)}</em>
         <i>${escapeHtml(signedPoints(metrics?.analystChange))}</i>
       </div>
       <div class="league-metric">
-        <span>Value score</span>
+        <span>Price score</span>
         <strong>${leagueScore(researchRank?.value)}</strong>
         <small>Forward P/E ${ratio(metrics?.forwardPe)}</small>
         <em>Price/book ${ratio(metrics?.priceToBook)}</em>
       </div>
       <div class="league-metric">
-        <span>Quality score</span>
+        <span>Business score</span>
         <strong>${leagueScore(researchRank?.quality)}</strong>
         <small>ROE ${plainPercent(metrics?.roe, 1)}</small>
         <em>Debt/equity ${ratio(metrics?.debtToEquity)}</em>
@@ -2509,7 +2515,7 @@ function renderHoldingRow(assessment) {
         <em>Sales ${percent(metrics?.revenueGrowth)} · EPS ${percent(metrics?.earningsGrowth)}</em>
       </div>
       <div class="league-metric">
-        <span>Trend score</span>
+        <span>Direction score</span>
         <strong>${leagueScore(researchRank?.momentum)}</strong>
         <small>6M ${percent(metrics?.sixMonthReturn)}</small>
         <em>1Y ${percent(metrics?.yearReturn)} · analyst ${leagueScore(researchRank?.analystSentiment)}</em>
@@ -3337,6 +3343,36 @@ document.querySelectorAll('dialog').forEach(dialog => {
     if (event.target === dialog) dialog.close();
   });
 });
+
+function showDashboardArea(view) {
+  const allowed = new Set(['overview', 'money', 'research', 'proof']);
+  const next = allowed.has(view) ? view : 'overview';
+  document.querySelectorAll('[data-dashboard-view]').forEach(section => {
+    const views = String(section.dataset.dashboardView || '').split(/\s+/);
+    section.classList.toggle('is-deck-hidden', !views.includes(next));
+  });
+  document.querySelectorAll('[data-deck-view]').forEach(button => {
+    const selected = button.dataset.deckView === next;
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  try {
+    window.sessionStorage.setItem('kestrel-dashboard-area', next);
+  } catch (error) {
+    // The dashboard remains usable when private browsing blocks storage.
+  }
+}
+
+document.querySelectorAll('[data-deck-view]').forEach(button => {
+  button.addEventListener('click', () => showDashboardArea(button.dataset.deckView));
+});
+
+let initialDashboardArea = 'overview';
+try {
+  initialDashboardArea = window.sessionStorage.getItem('kestrel-dashboard-area') || 'overview';
+} catch (error) {
+  initialDashboardArea = 'overview';
+}
+showDashboardArea(initialDashboardArea);
 
 async function startKestrel() {
   await syncPortfolioFromServer();

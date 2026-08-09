@@ -6,39 +6,39 @@ const PORTFOLIO = [
   { symbol: 'VEA', weight: 7 }, { symbol: 'IEMG', weight: 7 },
   { symbol: 'AVDV', weight: 5 }, { symbol: 'PAVE', weight: 5 },
   { symbol: 'TSM', weight: 6 }, { symbol: 'GOOGL', weight: 6 },
-  { symbol: 'AMZN', weight: 5 }, { symbol: 'ASML', weight: 5 },
-  { symbol: 'MELI', weight: 5 }, { symbol: 'ETN', weight: 4 },
-  { symbol: 'ISRG', weight: 4 }, { symbol: 'CEG', weight: 3 },
+  { symbol: 'V', weight: 5 }, { symbol: 'TTE', weight: 5 },
+  { symbol: 'MELI', weight: 5 }, { symbol: 'NVO', weight: 4 },
+  { symbol: 'ISRG', weight: 4 }, { symbol: 'UL', weight: 3 },
   { symbol: 'IBIT', weight: 8 }, { symbol: 'SGOV', weight: 2 },
 ];
 
 const COMPANIES = [
   { symbol: 'TSM', name: 'TSMC' }, { symbol: 'GOOGL', name: 'Alphabet' },
-  { symbol: 'AMZN', name: 'Amazon' }, { symbol: 'ASML', name: 'ASML' },
-  { symbol: 'MELI', name: 'MercadoLibre' }, { symbol: 'ETN', name: 'Eaton' },
-  { symbol: 'ISRG', name: 'Intuitive Surgical' }, { symbol: 'CEG', name: 'Constellation' },
+  { symbol: 'V', name: 'Visa' }, { symbol: 'TTE', name: 'TotalEnergies' },
+  { symbol: 'MELI', name: 'MercadoLibre' }, { symbol: 'NVO', name: 'Novo Nordisk' },
+  { symbol: 'ISRG', name: 'Intuitive Surgical' }, { symbol: 'UL', name: 'Unilever' },
 ];
 
 const SCENARIOS = [
   {
     name: 'Severe global recession',
     description: 'Demand collapses, unemployment rises sharply and investors abandon risky assets.',
-    shocks: { VTI:-31, AVUV:-40, VEA:-32, IEMG:-36, AVDV:-40, PAVE:-35, TSM:-38, GOOGL:-32, AMZN:-35, ASML:-40, MELI:-45, ETN:-38, ISRG:-28, CEG:-25, IBIT:-50, SGOV:1 },
+    shocks: { VTI:-31, AVUV:-40, VEA:-32, IEMG:-36, AVDV:-40, PAVE:-35, TSM:-38, GOOGL:-32, V:-25, TTE:-30, MELI:-45, NVO:-20, ISRG:-28, UL:-15, IBIT:-50, SGOV:1 },
   },
   {
     name: 'AI spending disappointment',
     description: 'AI demand remains real, but customers delay spending and expected profits arrive much later.',
-    shocks: { VTI:-18, AVUV:-12, VEA:-14, IEMG:-22, AVDV:-14, PAVE:-24, TSM:-48, GOOGL:-30, AMZN:-28, ASML:-44, MELI:-16, ETN:-34, ISRG:-10, CEG:-30, IBIT:-28, SGOV:1 },
+    shocks: { VTI:-18, AVUV:-12, VEA:-14, IEMG:-22, AVDV:-14, PAVE:-24, TSM:-48, GOOGL:-30, V:-10, TTE:-5, MELI:-16, NVO:-8, ISRG:-10, UL:-5, IBIT:-28, SGOV:1 },
   },
   {
     name: 'Inflation and rates shock',
     description: 'Inflation returns, borrowing costs rise and investors pay less for distant future profits.',
-    shocks: { VTI:-25, AVUV:-24, VEA:-22, IEMG:-26, AVDV:-24, PAVE:-20, TSM:-27, GOOGL:-28, AMZN:-32, ASML:-30, MELI:-35, ETN:-22, ISRG:-32, CEG:-14, IBIT:-40, SGOV:0 },
+    shocks: { VTI:-25, AVUV:-24, VEA:-22, IEMG:-26, AVDV:-24, PAVE:-20, TSM:-27, GOOGL:-28, V:-20, TTE:5, MELI:-35, NVO:-18, ISRG:-32, UL:-12, IBIT:-40, SGOV:0 },
   },
   {
     name: 'Technology crash',
     description: 'The market abruptly reprices profitable technology companies as it did after previous bubbles.',
-    shocks: { VTI:-32, AVUV:-22, VEA:-21, IEMG:-34, AVDV:-22, PAVE:-28, TSM:-58, GOOGL:-48, AMZN:-48, ASML:-54, MELI:-43, ETN:-34, ISRG:-34, CEG:-27, IBIT:-55, SGOV:1 },
+    shocks: { VTI:-32, AVUV:-22, VEA:-21, IEMG:-34, AVDV:-22, PAVE:-28, TSM:-58, GOOGL:-48, V:-15, TTE:-10, MELI:-43, NVO:-12, ISRG:-34, UL:-8, IBIT:-55, SGOV:1 },
   },
 ];
 
@@ -51,17 +51,18 @@ const UPSIDE_SCENARIOS = [
   {
     name: 'Strong execution',
     annualReturn: 22,
-    description: 'AI, cloud, electrification and international growth all deliver better-than-normal progress.',
+    description: 'AI, payments, healthcare, energy and international growth all deliver better-than-normal progress.',
   },
   {
     name: 'Exceptional cycle',
     annualReturn: 35,
-    description: 'Several high-conviction themes succeed together and Bitcoin also contributes strongly.',
+    description: 'Several independent profit engines succeed together and Bitcoin also contributes strongly.',
   },
 ];
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const compactMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
+const preciseMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const number = value => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -85,6 +86,9 @@ function loadCapital() {
 }
 
 let capital = loadCapital();
+let portfolioSelection = null;
+let latestFundHoldings = [];
+let fundHoldingsComplete = false;
 
 function setStatus(element, text, state) {
   element.textContent = text;
@@ -175,6 +179,8 @@ function renderCapital() {
   updateAllocationAmounts();
   renderUpsideScenarios();
   renderScenarios();
+  if (portfolioSelection) renderPortfolioSelection(portfolioSelection);
+  if (latestFundHoldings.length) renderFundHoldings();
 }
 
 function saveCapital(nextCapital) {
@@ -444,7 +450,7 @@ function sciencePercent(value) {
 
 function renderScienceComparison(payload) {
   const records = [
-    { name: 'Candidate 1 · frozen', metrics: payload.candidate?.metrics, className: '' },
+    { name: 'Candidate 2 · current judgement', metrics: payload.candidate?.metrics, className: '' },
     { name: 'Research challenger', metrics: payload.challenger?.metrics, className: 'is-research' },
     { name: 'VT · global benchmark', metrics: payload.benchmark, className: '' },
   ];
@@ -523,7 +529,7 @@ function renderWalkForward(payload) {
     : Number(metrics.informationRatioVsBenchmark).toFixed(2);
   const failures = result.failures || [];
   document.getElementById('walkForwardSummary').textContent = eligible
-    ? `The challenger beat Candidate 1 in ${result.candidateWins} windows and VT in ${result.benchmarkWins}, after declared costs.`
+    ? `The challenger beat Candidate 2 in ${result.candidateWins} windows and VT in ${result.benchmarkWins}, after declared costs.`
     : failures[0] || 'The challenger has not earned promotion on genuinely unseen evidence.';
 
   const rows = (result.windows || []).map(window => {
@@ -539,7 +545,7 @@ function renderWalkForward(payload) {
     const outcome = document.createElement('strong');
     outcome.textContent = sciencePercent(window.challengerNetReturn);
     const comparisons = document.createElement('p');
-    comparisons.textContent = `${sciencePercent(window.versusCandidate)} vs Candidate 1 · ${sciencePercent(window.versusBenchmark)} vs VT`;
+    comparisons.textContent = `${sciencePercent(window.versusCandidate)} vs Candidate 2 · ${sciencePercent(window.versusBenchmark)} vs VT`;
     const marker = document.createElement('b');
     marker.textContent = passed ? 'Won both' : 'Did not win both';
     row.append(period, outcome, comparisons, marker);
@@ -556,7 +562,60 @@ function renderWalkForward(payload) {
   const benchmark = result.uncertainty?.versusBenchmark || {};
   document.getElementById('walkForwardUncertainty').textContent = candidate.low === null || candidate.low === undefined
     ? 'A 95% uncertainty range needs at least five independent annual windows. Until then, the promotion gate stays closed.'
-    : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 1; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
+    : `95% net-return improvement range: ${sciencePercent(candidate.low)} to ${sciencePercent(candidate.high)} versus Candidate 2; ${sciencePercent(benchmark.low)} to ${sciencePercent(benchmark.high)} versus VT. Whole annual windows were resampled.`;
+}
+
+function exposurePercent(value) {
+  const parsed = Number(value || 0);
+  const digits = parsed >= 0.01 ? 3 : parsed >= 0.001 ? 4 : 5;
+  return `${parsed.toFixed(digits)}%`;
+}
+
+function renderFundHoldings() {
+  const input = document.getElementById('fundHoldingSearch');
+  const query = String(input?.value || '').trim().toLowerCase();
+  const matches = query
+    ? latestFundHoldings.filter(item => `${item.symbol || ''} ${item.name || ''} ${item.fund || ''}`.toLowerCase().includes(query))
+    : latestFundHoldings;
+  const shown = matches.slice(0, query ? 50 : 15);
+  const rows = shown.map(item => {
+    const row = document.createElement('div');
+    row.className = 'fund-holding-row';
+    row.setAttribute('role', 'row');
+    const company = document.createElement('div');
+    company.className = 'fund-holding-company';
+    const name = document.createElement('strong');
+    name.textContent = item.name || item.symbol || 'Unnamed position';
+    const symbol = document.createElement('small');
+    symbol.textContent = `${item.symbol || 'No ticker'} · holdings dated ${item.asOf || 'unknown'}`;
+    company.append(name, symbol);
+    const fund = document.createElement('span');
+    fund.textContent = item.fund || '—';
+    const fundWeight = document.createElement('span');
+    fundWeight.textContent = exposurePercent(item.fundWeight);
+    const portfolioWeight = document.createElement('b');
+    portfolioWeight.textContent = exposurePercent(item.portfolioWeight);
+    const value = document.createElement('span');
+    value.textContent = preciseMoney.format(capital * Number(item.portfolioWeight || 0) / 100);
+    row.append(company, fund, fundWeight, portfolioWeight, value);
+    return row;
+  });
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'fund-holding-empty';
+    empty.textContent = latestFundHoldings.length
+      ? 'No verified fund company matches that search.'
+      : 'No complete issuer positions are available, so Kestrel will not estimate hidden exposure.';
+    rows.push(empty);
+  }
+  document.getElementById('fundHoldingRows').replaceChildren(...rows);
+  const count = document.getElementById('fundHoldingCount');
+  count.textContent = query
+    ? `${matches.length.toLocaleString()} matching position${matches.length === 1 ? '' : 's'} · showing ${shown.length}`
+    : `${latestFundHoldings.length.toLocaleString()} verified company positions · showing largest ${shown.length}`;
+  document.getElementById('fundHoldingMethod').textContent = fundHoldingsComplete
+    ? 'All six official issuer files passed freshness and reconciliation. Each ETF position stays separate unless a stable identity proves two records are the same security.'
+    : 'This is partial evidence from the issuer files that passed. Missing or stale funds are excluded, and Kestrel does not call the result total portfolio exposure.';
 }
 
 function renderLookthrough(payload) {
@@ -590,6 +649,9 @@ function renderLookthrough(payload) {
     rows.push(empty);
   }
   document.getElementById('lookthroughRows').replaceChildren(...rows);
+  latestFundHoldings = Array.isArray(lookthrough.fundHoldings) ? lookthrough.fundHoldings : [];
+  fundHoldingsComplete = lookthrough.fundHoldingsComplete === true;
+  renderFundHoldings();
   const current = (lookthrough.sources || []).filter(source => source.ready);
   const oldest = current.reduce((value, source) => Math.max(value, Number(source.ageDays || 0)), 0);
   document.getElementById('lookthroughMethod').textContent = complete
@@ -608,7 +670,7 @@ function renderPortfolioScience(payload) {
     : 'A complete common history is not available';
   document.getElementById('scienceAlternatives').textContent = new Intl.NumberFormat('en-US').format(research.portfoliosTested || 0);
   document.getElementById('scienceGates').textContent = `${gates.passed || 0} / ${gates.total || 0}`;
-  document.getElementById('scienceDecision').textContent = ready ? 'Eligible to challenge' : 'Keep Candidate 1';
+  document.getElementById('scienceDecision').textContent = ready ? 'Eligible to challenge' : 'Keep Candidate 2';
   document.getElementById('scienceDecisionNote').textContent = payload.message || 'No allocation changes while evidence is incomplete';
   renderScienceComparison(payload);
   renderScienceChanges(payload);
@@ -619,6 +681,70 @@ function renderPortfolioScience(payload) {
   renderDcf(payload.dcf);
 }
 
+function renderPortfolioSelection(payload) {
+  const status = document.getElementById('universeSelectionStatus');
+  const topStatus = document.getElementById('selectionTopStatus');
+  const summary = document.getElementById('universeSelectionSummary');
+  const proof = document.getElementById('universeSelectionProof');
+  const grid = document.getElementById('selectedCompanyGrid');
+  const selected = Array.isArray(payload.selected) ? payload.selected : [];
+  if (payload.status !== 'selected' || selected.length !== 8) {
+    const reason = payload.reason || 'The latest frozen evidence cannot support a complete selection.';
+    setStatus(status, 'Selection stopped safely', 'limited');
+    topStatus.textContent = 'No new frozen selection yet';
+    summary.textContent = `${reason} Candidate 2 remains Kestrel's best current judgement.`;
+    proof.hidden = true;
+    const empty = document.createElement('article');
+    empty.className = 'selection-empty';
+    const title = document.createElement('strong');
+    title.textContent = 'Kestrel refused to guess';
+    const detail = document.createElement('span');
+    detail.textContent = 'A new candidate needs eight companies with frozen identities, listing membership, prices and enough company evidence. Missing information cannot be filled with assumptions.';
+    empty.append(title, detail);
+    grid.replaceChildren(empty);
+    return;
+  }
+
+  const oldSymbols = new Set(COMPANIES.map(item => item.symbol));
+  const newSymbols = new Set(selected.map(item => item.symbol));
+  const additions = selected.filter(item => !oldSymbols.has(item.symbol)).length;
+  const removals = COMPANIES.filter(item => !newSymbols.has(item.symbol)).length;
+  setStatus(status, 'New research candidate frozen', 'ready');
+  topStatus.textContent = `Automatic selection · ${payload.cutoffUtc ? payload.cutoffUtc.slice(0, 10) : 'frozen snapshot'}`;
+  summary.textContent = additions || removals
+    ? `The frozen evidence changed ${additions} compan${additions === 1 ? 'y' : 'ies'} and removed ${removals} from Candidate 2. This is a research candidate, not an approved trade list.`
+    : 'The frozen evidence independently selected the same eight companies as Candidate 2. It remains research-only until every approval gate passes.';
+  proof.hidden = false;
+  proof.textContent = `Snapshot ${String(payload.snapshotId || '').slice(0, 12)}… · candidate ${String(payload.candidateHash || '').slice(0, 12)}… · ${payload.eligibleCount || 0} eligible companies · maximum economic theme ${Number(payload.maximumThemeWeight || 12).toFixed(0)}% · method ${payload.selectionVersion || 'unknown'}`;
+  const cards = selected.map((item, index) => {
+    const card = document.createElement('article');
+    card.className = 'selected-company';
+    const rank = document.createElement('span');
+    rank.textContent = `Selected ${index + 1} of 8 · ${Number(item.weight).toFixed(0)}% · ${compactMoney.format(capital * Number(item.weight) / 100)}`;
+    const name = document.createElement('strong');
+    name.textContent = item.name || item.symbol;
+    const symbol = document.createElement('small');
+    symbol.textContent = `${item.symbol} · score ${Number(item.score).toFixed(1)}/100`;
+    const reason = document.createElement('p');
+    reason.textContent = item.reason || 'Selected from the frozen company evidence.';
+    card.append(rank, name, symbol, reason);
+    return card;
+  });
+  grid.replaceChildren(...cards);
+}
+
+async function loadPortfolioSelection() {
+  try {
+    const response = await fetch('/api/portfolio-selection', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Automatic selection was unavailable');
+    portfolioSelection = await response.json();
+    renderPortfolioSelection(portfolioSelection);
+  } catch (error) {
+    portfolioSelection = { status: 'blocked', reason: 'The frozen-universe selector is unavailable.' };
+    renderPortfolioSelection(portfolioSelection);
+  }
+}
+
 async function loadPortfolioScience() {
   try {
     const response = await fetch('/api/portfolio-science');
@@ -626,7 +752,7 @@ async function loadPortfolioScience() {
     renderPortfolioScience(await response.json());
   } catch (error) {
     setStatus(document.getElementById('scienceStatus'), 'Audit unavailable · no changes', 'limited');
-    document.getElementById('scienceDecision').textContent = 'Keep Candidate 1';
+    document.getElementById('scienceDecision').textContent = 'Keep Candidate 2';
     document.getElementById('scienceDecisionNote').textContent = 'Kestrel could not complete the evidence checks, so it made no allocation changes.';
     renderWalkForward({});
     renderLookthrough({});
@@ -645,7 +771,48 @@ capitalInput.addEventListener('change', event => {
   saveCapital(value !== null && value >= 1000 ? value : capital);
 });
 document.getElementById('resetCapital').addEventListener('click', () => saveCapital(DEFAULT_CAPITAL));
+document.getElementById('fundHoldingSearch').addEventListener('input', renderFundHoldings);
+
+function showPlanArea(view) {
+  const allowed = new Set(['answer', 'portfolio', 'proof', 'risk', 'rules']);
+  const next = allowed.has(view) ? view : 'answer';
+  document.querySelectorAll('[data-plan-panel]').forEach(section => {
+    const views = String(section.dataset.planPanel || '').split(/\s+/);
+    section.classList.toggle('is-plan-hidden', !views.includes(next));
+  });
+  document.querySelectorAll('[data-plan-view]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.planView === next));
+  });
+  try {
+    window.sessionStorage.setItem('kestrel-plan-area', next);
+  } catch (error) {
+    // The plan still works when browser storage is unavailable.
+  }
+}
+
+document.querySelectorAll('[data-plan-view]').forEach(button => {
+  button.addEventListener('click', () => showPlanArea(button.dataset.planView));
+});
+
+document.querySelectorAll('[data-reveal-panel]').forEach(button => {
+  button.addEventListener('click', () => {
+    const panel = document.getElementById(button.dataset.revealPanel);
+    if (!panel) return;
+    const opening = panel.hidden;
+    panel.hidden = !opening;
+    button.setAttribute('aria-expanded', String(opening));
+  });
+});
+
+let initialPlanArea = 'answer';
+try {
+  initialPlanArea = window.sessionStorage.getItem('kestrel-plan-area') || 'answer';
+} catch (error) {
+  initialPlanArea = 'answer';
+}
+showPlanArea(initialPlanArea);
 
 renderCapital();
 loadRisk();
+loadPortfolioSelection();
 loadPortfolioScience();

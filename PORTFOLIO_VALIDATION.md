@@ -3,6 +3,50 @@
 Kestrel is decision support. This evaluation can permit a challenger to be
 reviewed; it cannot change an allocation or place a trade.
 
+## Frozen company selection
+
+The original 16-holding portfolio remains Candidate 1 in immutable history.
+Candidate 2 is the current manual correction: it retains the diversified
+foundation, Bitcoin ceiling and reserve, but caps any declared direct-company
+economic theme at 12%. Its direct sleeve is TSM 6%, GOOGL 6%, Visa 5%,
+TotalEnergies 5%, MercadoLibre 5%, Novo Nordisk 4%, Intuitive Surgical 4% and
+Unilever 3%. It is a provisional judgement, not a proven optimum.
+
+A separate selector may replace Candidate 2's eight direct companies only from
+one cryptographically verified universe
+snapshot whose selection policy was frozen before scoring. It never reads the
+current ticker list or later evidence as a fallback.
+
+Each eligible company needs an included, active, identity-clean and
+membership-verified ledger row; a positive cutoff price; no official-filing
+conflict; and at least six of the eight declared valuation, quality, leverage,
+momentum and volatility descriptors. The selector ranks price, business quality
+and recent direction deterministically, resolves ties by stable ticker order,
+classifies each company into a versioned economic theme, and refuses any set
+that would put more than 12% into one theme. An unclassified theme fails closed.
+The record retains the snapshot ID, manifest hash, per-company evidence hash,
+theme-policy version, theme weights, method version and candidate hash. Fewer
+than eight eligible companies produces no
+portfolio. Missing, ambiguous or conflicting evidence never inherits the old
+company as though it had been selected.
+
+The diversified fund foundation, Bitcoin ceiling and reserve remain fixed by
+the mandate in this stage. A selected company list is research only. It must
+still pass the independent valuation, look-through, concentration, risk,
+turnover and five untouched-window gates below before human review; selection
+cannot weaken or substitute for any of them.
+
+Current look-through is not limited to companies already selected directly.
+Every non-cash company position from the six official issuer files is retained
+as a separately searchable ETF row with ticker, issuer name, ETF weight,
+portfolio weight, holdings date and approximate value at the user's chosen
+capital. Kestrel does not merge records across funds without a stable identity.
+For Vanguard, sub-basis-point positions use the issuer's exact market values
+divided by the complete stock-holdings market value because its displayed
+percentage rounds the smallest companies to zero. Missing, stale or
+unreconciled funds are excluded and the result is labelled partial; they are
+never silently treated as zero exposure.
+
 ## Frozen experiment
 
 Before any test period begins, record the model version, fixed instrument
@@ -86,15 +130,15 @@ deletes as well as outcome-history rewrites.
 - Evaluate the frozen weights over the next 12 months.
 - Use non-overlapping annual windows; require at least five.
 - Charge the challenger declared one-way cost in proportion to turnover from
-  Candidate 1. Charge the investable `VT` alternative its declared
-  implementation cost. Candidate 1 represents doing nothing and has no trade.
+  Candidate 2. Charge the investable `VT` alternative its declared
+  implementation cost. Candidate 2 represents doing nothing and has no trade.
 - Never tune the search, cost or gate from an outer test result.
 
 ## Report and promotion gate
 
-For every window, report net challenger, Candidate 1 and `VT` return. Across
+For every window, report net challenger, Candidate 2 and `VT` return. Across
 all eligible windows, report annualised net return, maximum drawdown and
-information ratio versus Candidate 1 and `VT`. Quantify uncertainty with a
+information ratio versus Candidate 2 and `VT`. Quantify uncertainty with a
 deterministic 95% bootstrap interval that resamples whole annual windows, so
 correlated months are never treated as independent evidence.
 

@@ -1,7 +1,8 @@
 """Fail-closed scientific challenger for Kestrel's long-horizon portfolio.
 
 This module does not declare a portfolio "optimal" from one noisy history.
-It freezes the researched portfolio as Candidate 1, generates constrained
+It preserves the original researched portfolio as Candidate 1, freezes the
+theme-capped revision as Candidate 2, generates constrained
 alternatives from conservative return estimates and a shrunk covariance
 matrix, and then reports both the result and every reason it cannot yet be
 promoted.  All calculations use data supplied to the function, which keeps the
@@ -25,31 +26,37 @@ from conservative_dcf import build_dcf_snapshot, official_treasury_10y
 from universe_ledger import PROTOCOL_VERSION as UNIVERSE_PROTOCOL_VERSION
 
 
-MODEL_VERSION = "portfolio-science-v7"
+MODEL_VERSION = "portfolio-science-v9"
 DEFAULT_ITERATIONS = 20_000
 RANDOM_SEED = 20260808
 CACHE_SECONDS = 12 * 60 * 60
 
-CANDIDATE_WEIGHTS: Dict[str, float] = {
+CANDIDATE_1_WEIGHTS: Dict[str, float] = {
     "VTI": 20, "AVUV": 8, "VEA": 7, "IEMG": 7, "AVDV": 5, "PAVE": 5,
     "TSM": 6, "GOOGL": 6, "AMZN": 5, "ASML": 5, "MELI": 5, "ETN": 4,
     "ISRG": 4, "CEG": 3, "IBIT": 8, "SGOV": 2,
 }
 
+CANDIDATE_WEIGHTS: Dict[str, float] = {
+    "VTI": 20, "AVUV": 8, "VEA": 7, "IEMG": 7, "AVDV": 5, "PAVE": 5,
+    "TSM": 6, "GOOGL": 6, "V": 5, "TTE": 5, "MELI": 5, "NVO": 4,
+    "ISRG": 4, "UL": 3, "IBIT": 8, "SGOV": 2,
+}
+
 GROUPS: Dict[str, str] = {
     "VTI": "foundation", "AVUV": "foundation", "VEA": "foundation",
     "IEMG": "foundation", "AVDV": "foundation", "PAVE": "foundation",
-    "TSM": "companies", "GOOGL": "companies", "AMZN": "companies",
-    "ASML": "companies", "MELI": "companies", "ETN": "companies",
-    "ISRG": "companies", "CEG": "companies", "IBIT": "asymmetric",
+    "TSM": "companies", "GOOGL": "companies", "V": "companies",
+    "TTE": "companies", "MELI": "companies", "NVO": "companies",
+    "ISRG": "companies", "UL": "companies", "IBIT": "asymmetric",
     "SGOV": "reserve",
 }
 
 BOUNDS: Dict[str, Tuple[float, float]] = {
     "VTI": (15, 35), "AVUV": (2, 12), "VEA": (5, 20), "IEMG": (4, 15),
     "AVDV": (2, 10), "PAVE": (0, 8),
-    "TSM": (0, 6), "GOOGL": (0, 6), "AMZN": (0, 6), "ASML": (0, 6),
-    "MELI": (0, 6), "ETN": (0, 6), "ISRG": (0, 6), "CEG": (0, 6),
+    "TSM": (0, 6), "GOOGL": (0, 6), "V": (0, 6), "TTE": (0, 6),
+    "MELI": (0, 6), "NVO": (0, 6), "ISRG": (0, 6), "UL": (0, 6),
     "IBIT": (0, 8), "SGOV": (2, 12),
 }
 
@@ -57,6 +64,19 @@ FOUNDATION = [symbol for symbol, group in GROUPS.items() if group == "foundation
 COMPANIES = [symbol for symbol, group in GROUPS.items() if group == "companies"]
 SYMBOLS = list(CANDIDATE_WEIGHTS)
 BENCHMARK_SYMBOL = "VT"
+THEME_GROUPS = {
+    "TSM": "ai_capex", "GOOGL": "ai_capex",
+    "V": "digital_commerce", "MELI": "digital_commerce",
+    "NVO": "healthcare", "ISRG": "healthcare",
+    "TTE": "energy", "UL": "consumer_essentials",
+}
+THEME_CAPS = {
+    "ai_capex": 12.0,
+    "digital_commerce": 12.0,
+    "healthcare": 10.0,
+    "energy": 6.0,
+    "consumer_essentials": 6.0,
+}
 WALK_FORWARD_TRAIN_MONTHS = 36
 WALK_FORWARD_TEST_MONTHS = 12
 WALK_FORWARD_MIN_WINDOWS = 5
@@ -520,6 +540,20 @@ def _random_portfolio(rng: random.Random) -> Optional[Dict[str, float]]:
     }
 
 
+def _theme_exposures(weights: Dict[str, float]) -> Dict[str, float]:
+    exposures = {theme: 0.0 for theme in THEME_CAPS}
+    for symbol, theme in THEME_GROUPS.items():
+        exposures[theme] += float(weights.get(symbol, 0.0))
+    return exposures
+
+
+def _theme_limits_pass(weights: Dict[str, float]) -> bool:
+    return all(
+        exposure <= THEME_CAPS[theme] + 1e-9
+        for theme, exposure in _theme_exposures(weights).items()
+    )
+
+
 def _effective_company_exposure(weights: Dict[str, float], lookthrough: Optional[Dict[str, Any]]) -> Dict[str, float]:
     overlaps = (lookthrough or {}).get("fundOverlaps") or {}
     return {
@@ -544,6 +578,8 @@ def _search(matrix: Dict[str, List[float]], iterations: int,
         attempts += 1
         candidate = _random_portfolio(rng)
         if candidate is None:
+            continue
+        if not _theme_limits_pass(candidate):
             continue
         if lookthrough and max(_effective_company_exposure(candidate, lookthrough).values(), default=0) > 8:
             continue
@@ -627,6 +663,8 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
     effective_exposures = _effective_company_exposure(CANDIDATE_WEIGHTS, lookthrough)
     lookthrough_complete = bool((lookthrough or {}).get("complete"))
     concentration_ready = bool(effective_exposures) and max(effective_exposures.values(), default=100) <= 8
+    theme_exposures = _theme_exposures(CANDIDATE_WEIGHTS)
+    theme_ready = _theme_limits_pass(CANDIDATE_WEIGHTS)
     fundamental_price_total = (fundamentals or {}).get("priceChecksTotal", 8)
     fundamental_price_ready = (fundamentals or {}).get("priceChecksReady")
     if fundamental_price_ready is None:
@@ -649,6 +687,11 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
          )},
         {"id": "effective_concentration", "name": "No effective company exposure above 8%",
          "passed": lookthrough_complete and concentration_ready},
+        {"id": "thematic_concentration", "name": "No direct economic theme above its declared ceiling",
+         "passed": theme_ready, "detail": "; ".join(
+             f'{theme.replace("_", " ")} {exposure:.0f}% of {THEME_CAPS[theme]:.0f}%'
+             for theme, exposure in theme_exposures.items()
+         )},
         {"id": "point_in_time", "name": "Point-in-time fundamentals and valuations",
          "passed": bool((fundamentals or {}).get("complete")), "detail": (
              f'{(fundamentals or {}).get("companiesReady", 0)} of {(fundamentals or {}).get("companiesTotal", 8)} as-filed histories; '
@@ -671,7 +714,7 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
         {"id": "walk_forward", "name": "Challenger wins unseen walk-forward periods",
          "passed": bool(walk_forward.get("eligible")), "detail": (
              f'{walk_forward.get("windowCount", 0)} of {walk_forward.get("minimumWindows", WALK_FORWARD_MIN_WINDOWS)} '
-             + f'independent windows; {walk_forward.get("candidateWins", 0)} wins versus Candidate 1; '
+             + f'independent windows; {walk_forward.get("candidateWins", 0)} wins versus Candidate 2; '
              + f'{walk_forward.get("benchmarkWins", 0)} wins versus VT'
          )},
         {"id": "costs", "name": "Turnover and estimated trading cost included",
@@ -689,14 +732,14 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
     return {
         "modelVersion": MODEL_VERSION,
         "status": "promotion_ready" if promotion_ready else "research_only",
-        "title": "Scientific challenger" if promotion_ready else "Candidate 1 remains frozen",
+        "title": "Scientific challenger" if promotion_ready else "Candidate 2 remains provisional",
         "message": (
             "Every evidence and validation gate passed."
             if promotion_ready else
-            "The engine can challenge the weights, but missing evidence prevents it from replacing Candidate 1."
+            "The engine can challenge the weights, but missing evidence prevents it from replacing Candidate 2."
         ),
         "objective": "Maximise robust expected two-year wealth within an 8/10 risk budget",
-        "candidate": {"name": "Candidate 1", "weights": CANDIDATE_WEIGHTS,
+        "candidate": {"name": "Candidate 2", "weights": CANDIDATE_WEIGHTS,
                       "metrics": candidate_metrics, "bootstrap": _bootstrap(CANDIDATE_WEIGHTS, matrix)},
         "challenger": {"name": "Research challenger", "weights": challenger,
                        "metrics": challenger_metrics, "bootstrap": _bootstrap(challenger, matrix),
@@ -713,12 +756,15 @@ def analyze_portfolio_science(histories: Dict[str, Dict[str, Any]],
             "riskPreference": "Low penalty consistent with an 8/10 appetite; hard concentration ceilings remain",
             "turnoverPercent": round(turnover, 2),
             "estimatedTradingCostPercent": round(estimated_cost * 100, 3),
+            "themeExposures": theme_exposures,
+            "themeCaps": THEME_CAPS,
             "warning": "Historical and bootstrap results describe the supplied sample; they are not forecasts.",
         },
         "gates": {"passed": passed, "total": len(gates), "items": gates},
         "lookthrough": lookthrough or {
             "status": "not_supplied", "complete": False, "fundsReady": 0,
-            "fundsTotal": 6, "sources": [], "exposures": [],
+            "fundsTotal": 6, "sources": [], "exposures": [], "fundHoldings": [],
+            "fundHoldingsCount": 0, "fundHoldingsComplete": False,
         },
         "fundamentals": fundamentals or {
             "status": "not_supplied", "complete": False, "companiesReady": 0,
@@ -770,7 +816,7 @@ def portfolio_science_snapshot(force: bool = False,
         payload["errors"] = errors
         if errors:
             payload["status"] = "data_incomplete"
-            payload["title"] = "Candidate 1 remains frozen"
+            payload["title"] = "Candidate 2 remains provisional"
             payload["message"] = "Some histories were unavailable, so no challenger can be promoted."
         if provider is None and walk_forward_protocol is None:
             _CACHE = dict(payload)
