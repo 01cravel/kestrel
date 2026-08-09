@@ -235,10 +235,10 @@ def build_evidence_summary(
     return {
         "version": POLICY_VERSION,
         "status": "guarded",
-        "title": "Portfolio, identity and US filings connected",
+        "title": "Some official checks are connected",
         "summary": (
-            "Sarwa holdings and SEC filings are authoritative, and instruments now have stable identities. "
-            "Prices, corporate actions, international filings and analyst consensus still need stronger sources."
+            "Your Sarwa holdings and official US company filings are trusted, and each investment has a stable identity. "
+            "Prices, dividends, takeovers, non-US filings and analyst forecasts still need stronger independent checks."
         ),
         "authoritativeAreas": authoritative_areas,
         "totalAreas": total_areas,
@@ -274,17 +274,17 @@ def build_evidence_summary(
             ),
         },
         "nextUpgrade": (
-            "Resolve the remaining instrument identities before rating them."
+            "Confirm the identity of every remaining investment before rating it."
             if identity_total and not identity_clean
-            else "Resolve any remaining daily price or split-adjustment disagreements."
+            else "Resolve any disagreement about daily prices or share splits."
             if institutional_total and not institutional_clean
-            else "Test the Benzinga named-ratings trial across the full portfolio before considering a paid plan."
+            else "Test named analyst records across the whole portfolio before considering a paid data plan."
             if not named_key
-            else "Resolve named-analyst coverage or consensus disagreements."
+            else "Resolve gaps or disagreements in named analyst opinions."
             if named_total and named_ready < named_total
-            else "Add pay-as-you-go official closes after creating a free Databento account; no subscription is required."
+            else "Add independently checked official closing prices; no subscription is required."
             if not institutional_key
-            else "Add Morningstar independent fair value only if its measured benefit justifies the licence."
+            else "Only add paid independent valuations if testing proves they improve the decisions."
         ),
     }
 

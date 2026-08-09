@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f2f5f7">
-  <title>Kestrel — Ultimate portfolio</title>
+  <title>Kestrel — Candidate portfolio</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/ultimate.css">
 </head>
@@ -14,21 +14,21 @@
   <header class="topbar blueprint-topbar">
     <a class="brand" href="/" aria-label="Kestrel home">
       <span class="brand-mark" aria-hidden="true">K</span>
-      <span><strong>Kestrel</strong><small>Your investment view</small></span>
+      <span><strong>Kestrel</strong><small>Your investment flight deck</small></span>
     </a>
     <nav class="site-nav" aria-label="Primary navigation">
-      <a href="/">Daily view</a>
-      <a class="is-current" href="/ultimate.html" aria-current="page">Ultimate portfolio</a>
+      <a href="/">My dashboard</a>
+      <a class="is-current" href="/ultimate.html" aria-current="page">Portfolio plan</a>
     </nav>
-    <div class="blueprint-status"><span></span>Hybrid conviction model · 5 August 2026</div>
+    <div class="blueprint-status"><span></span><b id="selectionTopStatus">Checking the latest frozen universe</b></div>
   </header>
 
   <main id="main" class="blueprint-main">
     <section class="blueprint-hero" aria-labelledby="portfolioTitle">
       <div class="hero-thesis">
-        <p class="eyebrow">The clean-sheet answer</p>
-        <h1 id="portfolioTitle">Put every dollar to work—without asking one idea to carry the future.</h1>
-        <p>This is Kestrel’s independent model for <strong id="heroCapital">$300,000</strong>, built for maximum wealth over the next two years at <strong>8/10 risk</strong>. It combines a diversified foundation with eight companies that have earned genuine conviction.</p>
+        <p class="eyebrow">A candidate—not a finished answer</p>
+        <h1 id="portfolioTitle">Build the strongest portfolio the evidence can currently support.</h1>
+        <p>Kestrel is testing a model for <strong id="heroCapital">$300,000</strong> over two years at <strong>8/10 risk</strong>. A candidate may change when a newly frozen market snapshot identifies stronger companies. It cannot become the approved portfolio until every safety gate passes.</p>
       </div>
       <dl class="mandate-stamp" aria-label="Portfolio mandate">
         <div><dt>Capital</dt><dd id="mandateCapital">$300,000</dd></div>
@@ -36,10 +36,54 @@
         <div><dt>Risk budget</dt><dd>8 / 10</dd></div>
         <div><dt>Planning drawdown</dt><dd>−45% to −60%</dd></div>
       </dl>
-      <p class="hero-guardrail"><strong>Honest limit:</strong> no scientific method can identify the certain highest-return portfolio over only two years. A temporary fall of 45–60% is plausible. The design seeks exceptional upside without letting one company or story decide the whole result.</p>
+      <p class="hero-guardrail"><strong>Honest limit:</strong> Kestrel cannot currently prove an “ultimate” portfolio. A temporary fall of 45–60% is plausible, and missing evidence always blocks promotion rather than being treated as good news.</p>
     </section>
 
-    <section class="capital-runway" aria-labelledby="runwayTitle">
+    <section class="plan-switchboard" aria-labelledby="planSwitchboardTitle">
+      <div>
+        <p class="eyebrow">Kestrel Galactica · portfolio map</p>
+        <h2 id="planSwitchboardTitle">What do you want to understand?</h2>
+        <p>Choose one question. The other detail stays safely out of the way.</p>
+      </div>
+      <nav class="plan-tabs" aria-label="Portfolio plan areas">
+        <button type="button" data-plan-view="answer" aria-pressed="true"><b>The answer now</b><span>Has Kestrel built a new candidate?</span></button>
+        <button type="button" data-plan-view="portfolio" aria-pressed="false"><b>The portfolio</b><span>Where would the money go?</span></button>
+        <button type="button" data-plan-view="proof" aria-pressed="false"><b>Testing &amp; proof</b><span>Has the method earned trust?</span></button>
+        <button type="button" data-plan-view="risk" aria-pressed="false"><b>Risk &amp; outcomes</b><span>What could go right or wrong?</span></button>
+        <button type="button" data-plan-view="rules" aria-pressed="false"><b>Rules &amp; sources</b><span>What stops reckless decisions?</span></button>
+      </nav>
+      <details class="plan-glossary">
+        <summary>Translate the investment words used on this page</summary>
+        <div>
+          <span><b>Candidate</b>A proposed portfolio being tested—not an approved plan.</span>
+          <span><b>Frozen</b>Saved before later results were known, so history cannot be rewritten.</span>
+          <span><b>Safety check</b>A rule that must pass before Kestrel can accept a change.</span>
+          <span><b>Benchmark</b>A simple world-market portfolio used for honest comparison.</span>
+          <span><b>Valuation</b>Whether the price looks sensible for the business and its cash.</span>
+          <span><b>Drawdown</b>The biggest temporary fall from an earlier high point.</span>
+          <span><b>Locked-result test</b>Judging what happened only after a decision was recorded.</span>
+          <span><b>True exposure</b>Adding direct ownership to the same company hidden inside funds.</span>
+        </div>
+      </details>
+    </section>
+
+    <section class="universe-selection" aria-labelledby="universeSelectionTitle" data-plan-panel="answer">
+      <div class="selection-heading">
+        <div>
+          <p class="eyebrow">Kestrel's latest company choices</p>
+          <h2 id="universeSelectionTitle">Has the evidence produced a new portfolio yet?</h2>
+        </div>
+        <span class="lab-status is-checking" id="universeSelectionStatus">Checking frozen evidence</span>
+      </div>
+      <p class="selection-intro" id="universeSelectionSummary">Kestrel is looking for a verified market snapshot. Until one exists, the old portfolio remains a comparison baseline—not a freshly selected answer.</p>
+      <div class="selection-proof" id="universeSelectionProof" hidden></div>
+      <div class="selected-company-grid" id="selectedCompanyGrid" aria-live="polite">
+        <article class="selection-empty"><strong>No automatic candidate yet</strong><span>The selector will stop here if identities, prices, company facts or the frozen record are incomplete.</span></article>
+      </div>
+      <p class="selection-rule"><strong>What stays fixed:</strong> the diversified fund foundation, 8% Bitcoin ceiling and 2% reserve. <strong>What can now change:</strong> the eight directly owned companies. Selection never bypasses valuation, portfolio-risk or five untouched-window approval.</p>
+    </section>
+
+    <section class="capital-runway" aria-labelledby="runwayTitle" data-plan-panel="answer portfolio">
       <div class="runway-heading">
         <div><p class="eyebrow">One capital runway</p><h2 id="runwayTitle"><span id="runwayCapital">$300,000</span>, deliberately divided</h2></div>
         <p>The funds stop one bad stock call from wrecking the plan. The named companies create the extra upside. Bitcoin is capped; leverage is zero.</p>
@@ -59,13 +103,15 @@
       </div>
     </section>
 
-    <section class="allocation-section" aria-labelledby="allocationTitle">
+    <section class="allocation-section" aria-labelledby="allocationTitle" data-plan-panel="portfolio">
       <div class="allocation-heading">
-        <div><p class="eyebrow">The complete allocation</p><h2 id="allocationTitle">Six funds. Eight companies. Two guardrails.</h2></div>
-        <p>Amounts are model targets, not trade instructions. Each company has a specific reason to own it—and a test that can remove it.</p>
+        <div><p class="eyebrow">Comparison baseline · selected by hand</p><h2 id="allocationTitle">The original portfolio is kept for honest comparison.</h2></div>
+        <p>These holdings are the unchanged Candidate 1 baseline. They are not presented as the latest automatic selection.</p>
       </div>
 
-      <div class="allocation-ledger" role="table" aria-label="Ultimate portfolio allocation">
+      <button class="panel-reveal" type="button" data-reveal-panel="allocationDetails" aria-expanded="false">Show every holding, amount and reason</button>
+      <div class="deep-panel" id="allocationDetails" hidden>
+      <div class="allocation-ledger" role="table" aria-label="Original candidate portfolio allocation">
         <div class="ledger-header" role="row">
           <span role="columnheader">Holding</span><span role="columnheader">Allocation</span><span role="columnheader">Why it earns a place</span><span role="columnheader">What makes us reconsider</span>
         </div>
@@ -172,9 +218,10 @@
           <p role="cell">It will trail equities in a strong rally and its income falls when interest rates fall.</p>
         </article>
       </div>
+      </div>
     </section>
 
-    <section class="science-workbench" aria-labelledby="scienceTitle">
+    <section class="science-workbench" aria-labelledby="scienceTitle" data-plan-panel="proof">
       <div class="science-heading">
         <div>
           <p class="eyebrow">Evidence before allocation</p>
@@ -182,27 +229,29 @@
         </div>
         <span class="lab-status is-checking" id="scienceStatus">Running scientific challenge</span>
       </div>
-      <p class="science-intro">The portfolio above is now frozen as Candidate 1. Kestrel searches constrained alternatives, tests the same risk rules on every one and refuses promotion when essential evidence is missing.</p>
+      <p class="science-intro">The original portfolio above remains frozen as Candidate 1 so Kestrel cannot move the goalposts. Automatic selections are recorded separately and must later beat this baseline, after costs, in genuinely untouched periods.</p>
 
       <div class="science-scoreboard" aria-label="Scientific portfolio audit status">
-        <article><span>Common history</span><strong id="scienceHistory">—</strong><small id="scienceHistoryDates">Checking all holdings</small></article>
-        <article><span>Alternatives tested</span><strong id="scienceAlternatives">—</strong><small>Same constraints for every portfolio</small></article>
-        <article><span>Evidence gates</span><strong id="scienceGates">—</strong><small>Every gate must pass before promotion</small></article>
+        <article><span>Past data available</span><strong id="scienceHistory">—</strong><small id="scienceHistoryDates">Checking all holdings</small></article>
+        <article><span>Other portfolio mixes tried</span><strong id="scienceAlternatives">—</strong><small>Every mix follows the same rules</small></article>
+        <article><span>Safety checks passed</span><strong id="scienceGates">—</strong><small>Every check must pass before a change</small></article>
         <article class="science-decision"><span>Current decision</span><strong id="scienceDecision">Checking</strong><small id="scienceDecisionNote">No allocation changes while evidence is incomplete</small></article>
       </div>
 
+      <button class="panel-reveal" type="button" data-reveal-panel="scienceDetails" aria-expanded="false">Open the detailed tests and plain-English checks</button>
+      <div class="deep-panel" id="scienceDetails" hidden>
       <div class="science-grid">
         <section class="science-comparison" aria-labelledby="scienceComparisonTitle">
-          <div class="panel-heading"><div><p class="eyebrow">Same history, same test</p><h3 id="scienceComparisonTitle">Candidate versus challenger</h3></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Same past, same rules</p><h3 id="scienceComparisonTitle">Current mix versus the best experiment</h3></div></div>
           <div class="science-table" role="table" aria-label="Portfolio research comparison">
-            <div class="science-table-head" role="row"><span role="columnheader">Portfolio</span><span role="columnheader">Annual return*</span><span role="columnheader">Annual movement</span><span role="columnheader">Worst 2 years*</span><span role="columnheader">Maximum fall*</span></div>
+            <div class="science-table-head" role="row"><span role="columnheader">Portfolio</span><span role="columnheader">Yearly growth*</span><span role="columnheader">Typical yearly swings</span><span role="columnheader">Worst two years*</span><span role="columnheader">Biggest fall*</span></div>
             <div id="scienceComparisonRows"><p class="lab-loading">Loading adjusted histories…</p></div>
           </div>
           <p class="lab-method">*Historical sample only—not a forecast. The challenger remains research-only until it wins genuinely unseen periods.</p>
         </section>
 
         <section class="science-changes" aria-labelledby="scienceChangesTitle">
-          <div class="panel-heading"><div><p class="eyebrow">What the model challenged</p><h3 id="scienceChangesTitle">Largest provisional weight differences</h3></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">What the experiment would change</p><h3 id="scienceChangesTitle">Biggest suggested allocation changes</h3></div></div>
           <div id="scienceChangeList" class="science-change-list"><p class="lab-loading">Generating constrained alternatives…</p></div>
           <p class="lab-method" id="scienceCost">Turnover and trading cost are being calculated.</p>
         </section>
@@ -210,15 +259,15 @@
 
       <section class="walkforward-panel" aria-labelledby="walkForwardTitle">
         <div class="panel-heading">
-          <div><p class="eyebrow">Sealed evidence</p><h3 id="walkForwardTitle">What happened after each decision was frozen</h3></div>
+          <div><p class="eyebrow">No hindsight allowed</p><h3 id="walkForwardTitle">What happened after each decision was locked</h3></div>
           <span class="lab-status is-checking" id="walkForwardStatus">Checking test integrity</span>
         </div>
         <p class="panel-intro" id="walkForwardSummary">Kestrel is checking whether enough genuinely unseen, non-overlapping periods exist.</p>
         <div class="walkforward-score" aria-label="Walk-forward outcome summary">
-          <div><span>Independent windows</span><strong id="walkForwardWindows">—</strong><small>Five required</small></div>
-          <div><span>Net annual return</span><strong id="walkForwardReturn">—</strong><small>Challenger after costs</small></div>
-          <div><span>Maximum fall</span><strong id="walkForwardDrawdown">—</strong><small>Across unseen periods</small></div>
-          <div><span>Risk-adjusted result</span><strong id="walkForwardRisk">—</strong><small>Information ratio versus VT</small></div>
+          <div><span>Fair test periods finished</span><strong id="walkForwardWindows">—</strong><small>Five required</small></div>
+          <div><span>Yearly result after costs</span><strong id="walkForwardReturn">—</strong><small>Experimental mix</small></div>
+          <div><span>Biggest fall</span><strong id="walkForwardDrawdown">—</strong><small>During unseen periods</small></div>
+          <div><span>Reward for risk taken</span><strong id="walkForwardRisk">—</strong><small>Compared with the world market</small></div>
         </div>
         <div class="walkforward-windows" id="walkForwardWindowList"><p class="lab-loading">Opening the chronological test record…</p></div>
         <p class="lab-method" id="walkForwardUncertainty">Uncertainty is reported by resampling whole independent windows, never individual months.</p>
@@ -253,20 +302,21 @@
           </ol>
         </section>
       </div>
+      </div>
     </section>
 
-    <section class="portfolio-lab" aria-labelledby="labTitle">
+    <section class="portfolio-lab" aria-labelledby="labTitle" data-plan-panel="risk">
       <div class="lab-heading">
         <div>
           <p class="eyebrow">The challenge layer</p>
-          <h2 id="labTitle">Is the portfolio ready for real money?</h2>
+          <h2 id="labTitle">Is the original baseline ready for real money?</h2>
         </div>
         <p>Kestrel now separates a good collection of businesses from a good portfolio bought at sensible prices. Missing evidence reduces confidence; it never becomes a positive signal.</p>
       </div>
 
       <div class="readiness-board">
-        <div class="readiness-score" aria-label="Current portfolio design confidence: 72 out of 100">
-          <span>Current design confidence</span>
+        <div class="readiness-score" aria-label="Original baseline design confidence: 72 out of 100">
+          <span>Baseline design confidence</span>
           <strong id="readinessScore">72<small>/100</small></strong>
           <p>This judges the design—not the chance of profit.</p>
         </div>
@@ -278,10 +328,12 @@
         </div>
       </div>
 
+      <button class="panel-reveal" type="button" data-reveal-panel="riskDetails" aria-expanded="false">Open pricing, portfolio-risk and outcome tests</button>
+      <div class="deep-panel" id="riskDetails" hidden>
       <div class="lab-grid">
         <section class="valuation-panel" aria-labelledby="valuationTitle">
           <div class="panel-heading">
-            <div><p class="eyebrow">Price versus business</p><h3 id="valuationTitle">Valuation gate</h3></div>
+            <div><p class="eyebrow">Price versus business</p><h3 id="valuationTitle">Are the companies reasonably priced?</h3></div>
             <span class="lab-status is-checking" id="valuationStatus">Checking 8 companies</span>
           </div>
           <p class="panel-intro">A wonderful company can still be a poor investment when its price assumes perfection. Filed P/E means today’s price divided only by earnings that were public at the time—never a later rewrite.</p>
@@ -306,7 +358,7 @@
 
         <section class="risk-panel" aria-labelledby="riskTitle">
           <div class="panel-heading">
-            <div><p class="eyebrow">How the pieces move together</p><h3 id="riskTitle">Portfolio risk signature</h3></div>
+            <div><p class="eyebrow">How the pieces move together</p><h3 id="riskTitle">How much could the portfolio swing?</h3></div>
             <span class="lab-status is-checking" id="riskStatus">Calculating history</span>
           </div>
           <div class="risk-readings">
@@ -368,9 +420,10 @@
           <a href="https://www.elibrary.imf.org/display/book/9781484310717/ch002.xml" target="_blank" rel="noopener noreferrer">IMF guidance</a>
         </div>
       </section>
+      </div>
     </section>
 
-    <section class="decision-system" aria-labelledby="rulesTitle">
+    <section class="decision-system" aria-labelledby="rulesTitle" data-plan-panel="rules">
       <div class="rules-intro">
         <p class="eyebrow">The discipline is part of the portfolio</p>
         <h2 id="rulesTitle">The rules that stop conviction becoming recklessness.</h2>
@@ -386,8 +439,8 @@
       </ol>
     </section>
 
-    <section class="evidence-foundation" aria-labelledby="evidenceTitle">
-      <div><p class="eyebrow">Why these names made the cut</p><h2 id="evidenceTitle">Current evidence, not a famous-name list</h2></div>
+    <section class="evidence-foundation" aria-labelledby="evidenceTitle" data-plan-panel="rules">
+      <div><p class="eyebrow">Why the original names made the cut</p><h2 id="evidenceTitle">Evidence behind the comparison baseline</h2></div>
       <div class="evidence-links">
         <a href="https://investor.tsmc.com/english/quarterly-results/2026/q2" target="_blank" rel="noopener noreferrer"><strong>TSMC · current results</strong><span>Advanced manufacturing leadership, exceptional margins and rising AI demand across customers.</span></a>
         <a href="https://ir.aboutamazon.com/news-release/news-release-details/2026/Amazon-com-Announces-Second-Quarter-Results/default.aspx" target="_blank" rel="noopener noreferrer"><strong>Amazon · current results</strong><span>AWS acceleration and operating-profit growth, balanced against unusually heavy AI investment.</span></a>
@@ -404,7 +457,7 @@
     </section>
   </main>
 
-  <footer class="blueprint-footer"><span>Kestrel model portfolio · version 2.4</span><a href="/">Return to daily view</a></footer>
+  <footer class="blueprint-footer"><span>Kestrel candidate portfolio · research only</span><a href="/">Return to today</a></footer>
   <script src="/ultimate.js"></script>
 </body>
 </html>

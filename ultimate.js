@@ -85,6 +85,7 @@ function loadCapital() {
 }
 
 let capital = loadCapital();
+let portfolioSelection = null;
 
 function setStatus(element, text, state) {
   element.textContent = text;
@@ -175,6 +176,7 @@ function renderCapital() {
   updateAllocationAmounts();
   renderUpsideScenarios();
   renderScenarios();
+  if (portfolioSelection) renderPortfolioSelection(portfolioSelection);
 }
 
 function saveCapital(nextCapital) {
@@ -619,6 +621,70 @@ function renderPortfolioScience(payload) {
   renderDcf(payload.dcf);
 }
 
+function renderPortfolioSelection(payload) {
+  const status = document.getElementById('universeSelectionStatus');
+  const topStatus = document.getElementById('selectionTopStatus');
+  const summary = document.getElementById('universeSelectionSummary');
+  const proof = document.getElementById('universeSelectionProof');
+  const grid = document.getElementById('selectedCompanyGrid');
+  const selected = Array.isArray(payload.selected) ? payload.selected : [];
+  if (payload.status !== 'selected' || selected.length !== 8) {
+    const reason = payload.reason || 'The latest frozen evidence cannot support a complete selection.';
+    setStatus(status, 'Selection stopped safely', 'limited');
+    topStatus.textContent = 'No new frozen selection yet';
+    summary.textContent = `${reason} Candidate 1 remains only a comparison baseline.`;
+    proof.hidden = true;
+    const empty = document.createElement('article');
+    empty.className = 'selection-empty';
+    const title = document.createElement('strong');
+    title.textContent = 'Kestrel refused to guess';
+    const detail = document.createElement('span');
+    detail.textContent = 'A new candidate needs eight companies with frozen identities, listing membership, prices and enough company evidence. Missing information cannot be filled with assumptions.';
+    empty.append(title, detail);
+    grid.replaceChildren(empty);
+    return;
+  }
+
+  const oldSymbols = new Set(COMPANIES.map(item => item.symbol));
+  const newSymbols = new Set(selected.map(item => item.symbol));
+  const additions = selected.filter(item => !oldSymbols.has(item.symbol)).length;
+  const removals = COMPANIES.filter(item => !newSymbols.has(item.symbol)).length;
+  setStatus(status, 'New research candidate frozen', 'ready');
+  topStatus.textContent = `Automatic selection · ${payload.cutoffUtc ? payload.cutoffUtc.slice(0, 10) : 'frozen snapshot'}`;
+  summary.textContent = additions || removals
+    ? `The frozen evidence changed ${additions} compan${additions === 1 ? 'y' : 'ies'} and removed ${removals} from the original baseline. This is a research candidate, not an approved trade list.`
+    : 'The frozen evidence independently selected the same eight companies as the original baseline. It remains research-only until every approval gate passes.';
+  proof.hidden = false;
+  proof.textContent = `Snapshot ${String(payload.snapshotId || '').slice(0, 12)}… · candidate ${String(payload.candidateHash || '').slice(0, 12)}… · ${payload.eligibleCount || 0} eligible companies · method ${payload.selectionVersion || 'unknown'}`;
+  const cards = selected.map((item, index) => {
+    const card = document.createElement('article');
+    card.className = 'selected-company';
+    const rank = document.createElement('span');
+    rank.textContent = `Selected ${index + 1} of 8 · ${Number(item.weight).toFixed(0)}% · ${compactMoney.format(capital * Number(item.weight) / 100)}`;
+    const name = document.createElement('strong');
+    name.textContent = item.name || item.symbol;
+    const symbol = document.createElement('small');
+    symbol.textContent = `${item.symbol} · score ${Number(item.score).toFixed(1)}/100`;
+    const reason = document.createElement('p');
+    reason.textContent = item.reason || 'Selected from the frozen company evidence.';
+    card.append(rank, name, symbol, reason);
+    return card;
+  });
+  grid.replaceChildren(...cards);
+}
+
+async function loadPortfolioSelection() {
+  try {
+    const response = await fetch('/api/portfolio-selection', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Automatic selection was unavailable');
+    portfolioSelection = await response.json();
+    renderPortfolioSelection(portfolioSelection);
+  } catch (error) {
+    portfolioSelection = { status: 'blocked', reason: 'The frozen-universe selector is unavailable.' };
+    renderPortfolioSelection(portfolioSelection);
+  }
+}
+
 async function loadPortfolioScience() {
   try {
     const response = await fetch('/api/portfolio-science');
@@ -646,6 +712,46 @@ capitalInput.addEventListener('change', event => {
 });
 document.getElementById('resetCapital').addEventListener('click', () => saveCapital(DEFAULT_CAPITAL));
 
+function showPlanArea(view) {
+  const allowed = new Set(['answer', 'portfolio', 'proof', 'risk', 'rules']);
+  const next = allowed.has(view) ? view : 'answer';
+  document.querySelectorAll('[data-plan-panel]').forEach(section => {
+    const views = String(section.dataset.planPanel || '').split(/\s+/);
+    section.classList.toggle('is-plan-hidden', !views.includes(next));
+  });
+  document.querySelectorAll('[data-plan-view]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.planView === next));
+  });
+  try {
+    window.sessionStorage.setItem('kestrel-plan-area', next);
+  } catch (error) {
+    // The plan still works when browser storage is unavailable.
+  }
+}
+
+document.querySelectorAll('[data-plan-view]').forEach(button => {
+  button.addEventListener('click', () => showPlanArea(button.dataset.planView));
+});
+
+document.querySelectorAll('[data-reveal-panel]').forEach(button => {
+  button.addEventListener('click', () => {
+    const panel = document.getElementById(button.dataset.revealPanel);
+    if (!panel) return;
+    const opening = panel.hidden;
+    panel.hidden = !opening;
+    button.setAttribute('aria-expanded', String(opening));
+  });
+});
+
+let initialPlanArea = 'answer';
+try {
+  initialPlanArea = window.sessionStorage.getItem('kestrel-plan-area') || 'answer';
+} catch (error) {
+  initialPlanArea = 'answer';
+}
+showPlanArea(initialPlanArea);
+
 renderCapital();
 loadRisk();
+loadPortfolioSelection();
 loadPortfolioScience();

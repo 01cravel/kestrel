@@ -3,6 +3,30 @@
 Kestrel is decision support. This evaluation can permit a challenger to be
 reviewed; it cannot change an allocation or place a trade.
 
+## Frozen company selection
+
+The original 16-holding portfolio is Candidate 1, a hand-selected comparison
+baseline rather than a newly generated optimum. A separate selector may replace
+its eight direct companies only from one cryptographically verified universe
+snapshot whose selection policy was frozen before scoring. It never reads the
+current ticker list or later evidence as a fallback.
+
+Each eligible company needs an included, active, identity-clean and
+membership-verified ledger row; a positive cutoff price; no official-filing
+conflict; and at least six of the eight declared valuation, quality, leverage,
+momentum and volatility descriptors. The selector ranks price, business quality
+and recent direction deterministically, resolves ties by stable ticker order,
+and retains the snapshot ID, manifest hash, per-company evidence hash, method
+version and candidate hash. Fewer than eight eligible companies produces no
+portfolio. Missing, ambiguous or conflicting evidence never inherits the old
+company as though it had been selected.
+
+The diversified fund foundation, Bitcoin ceiling and reserve remain fixed by
+the mandate in this stage. A selected company list is research only. It must
+still pass the independent valuation, look-through, concentration, risk,
+turnover and five untouched-window gates below before human review; selection
+cannot weaken or substitute for any of them.
+
 ## Frozen experiment
 
 Before any test period begins, record the model version, fixed instrument
